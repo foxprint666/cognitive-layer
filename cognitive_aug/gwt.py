@@ -216,11 +216,13 @@ class GlobalWorkspace(nn.Module):
         names = list(latent_states.keys())
         device = next(self.parameters()).device
 
-        # Stack latent states and keys
+        from .salience import global_pool_latent
+
+        # Stack latent states and keys after applying global pooling to ensure shape compatibility
         # latents: [B, num_modules, latent_dim]
         # keys: [B, num_modules, key_dim]
-        latents_list = [latent_states[name].to(device) for name in names]
-        keys_list = [keys[name].to(device) for name in names]
+        latents_list = [global_pool_latent(latent_states[name]).to(device) for name in names]
+        keys_list = [global_pool_latent(keys[name]).to(device) for name in names]
 
         latents_stacked = torch.stack(latents_list, dim=1)
         keys_stacked = torch.stack(keys_list, dim=1)

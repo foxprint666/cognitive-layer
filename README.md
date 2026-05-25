@@ -16,6 +16,11 @@ This library provides plug-and-play components to endow existing deep learning a
   - **Dynamic Ignition**: Non-linear, threshold-gated attentional selection where only highly active features are broadcast.
   - `BroadcastEngine` that distributes unified cognitive states back to all modules as context.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
+* **Optimized Cognitive Add-ons**:
+  - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
+  - **Low-Overhead Salience**: `MagnitudeSalience` (L2 norm), `EntropySalience` (Shannon entropy confidence), and stateful `TemporalSurpriseSalience` (temporal cosine distance tracking).
+  - **Decay Working Memory**: `DecayWorkingMemory` stateful wrapper with in-place exponential decay mutations and blended historical traces.
+  - **Parallel Downstream Routing**: `CognitiveOutputRouter` broadcasting workspace representations back into multiple output heads in a single vectorized matrix projection pass.
 
 ---
 
@@ -105,6 +110,33 @@ workspace_state = engine.step()
 
 print("Global Workspace broadcast vector shape:", workspace_state.shape)
 ```
+
+---
+
+## High-Performance Modular Add-ons
+
+For advanced cognitive systems or performance-critical setups, the package includes highly optimized, zero-copy, fully vectorized components.
+
+### 1. Advanced Attention Selectors (`selectors.py`)
+Replace the default selector with one of three high-speed subclasses inheriting from `BaseSelector`:
+- **`CosineSimilaritySelector`**: Uses vectorized matrix-based `cosine_similarity` to rapidly match incoming states to top-down goals.
+- **`VectorizedCrossAttentionSelector`**: Uses PyTorch's native `scaled_dot_product_attention` with the Value tensor designed as an identity matrix, unlocking native FlashAttention speeds while remaining fully differentiable.
+- **`EfficientGumbelSoftmaxSelector`**: A hard, winner-take-all routing mechanism using single-pass `gumbel_softmax` that retains full differentiability.
+
+### 2. Low-Overhead Salience Metrics (`salience.py`)
+Evaluate modular activation to compute confidence and decide workspace ignition:
+- **`MagnitudeSalience`**: Computes L2 norms of states in a single vectorized pass using `torch.linalg.vector_norm`.
+- **`EntropySalience`**: Computes Shannon entropy normalized to $[0, 1]$ confidence, penalizing noisy, unconfident representations.
+- **`TemporalSurpriseSalience`**: Stateful cache that detaches gradients across iterations and uses cosine distance to measure step-to-step temporal shifts.
+- **`global_pool_latent`**: A dimension-agnostic helper that automatically maps spatial/temporal latent tensor dimensions (e.g. `[B, T, D]` or `[B, C, H, W]`) into `[B, D]` vectors, avoiding sequential loops.
+
+### 3. Short-Term Decay Working Memory (`memory.py`)
+- **`DecayWorkingMemory`**: Exponentially decays inactive workspace slots in-place (`workspace_state.mul_(decay_rate)`) and returns a blended context vector of the active new winner and the decaying trace of the past.
+
+### 4. Parallel Output Router (`routing.py`)
+- **`CognitiveOutputRouter`**: Maps unified workspace representations back into dedicated output heads simultaneously using a **single parallel linear projection layer** and returns views using zero-copy slicing.
+
+For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).
 
 ---
 
