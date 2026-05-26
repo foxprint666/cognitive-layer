@@ -6,7 +6,7 @@ This library provides plug-and-play components to endow existing deep learning a
 
 ---
 
-## Features (Phase v0.1 MVP)
+## Features (Phase v0.2 - Active Dendritic Gating)
 
 * **Module Registry**: Track and coordinate active neural networks acting as specialized cognitive modules.
 * **Data Flow Manager**: High-performance, framework-integrated routing of latent representations across dynamic computation cycles.
@@ -15,6 +15,11 @@ This library provides plug-and-play components to endow existing deep learning a
   - Pluggable `AttentionSelector` supporting Top-Down Key-Query matching and Bottom-Up salience selection.
   - **Dynamic Ignition**: Non-linear, threshold-gated attentional selection where only highly active features are broadcast.
   - `BroadcastEngine` that distributes unified cognitive states back to all modules as context.
+* **Active Dendritic Gating (Phase v0.2)**:
+  - **`ActiveDendriteGate`**: Vectorized dendritic pre-processing that uses GWT context to modulate feedforward features.
+  - **Modulatory Gain**: Smooth sigmoidal scaling mapping context directly to features.
+  - **NMDA Threshold Spiking**: Sharp thresholding mimicking biological NMDA spikes (zeroing out inactive branches) with **Straight-Through Estimators (STE)** to ensure clean backpropagation.
+  - **Telemetry Dashboard**: Dynamic pathway inspection and active/muted statistics.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
@@ -136,6 +141,14 @@ Evaluate modular activation to compute confidence and decide workspace ignition:
 ### 4. Parallel Output Router (`routing.py`)
 - **`CognitiveOutputRouter`**: Maps unified workspace representations back into dedicated output heads simultaneously using a **single parallel linear projection layer** and returns views using zero-copy slicing.
 
+### 5. Active Dendritic Gating (`gwt/dendrite.py`) [Phase v0.2]
+Biologically-inspired active dendritic pre-processors that dynamically modulate local feedforward pathways using GWT context:
+- **`ActiveDendriteGate`**: Fully vectorized module that projects context `[B, context_dim]` onto dendritic branches.
+  - `"modulatory-gain"`: Smooth sigmoidal contextual scaling.
+  - `"nmda-threshold"`: Sharp thresholded biological spiking. Spikes if local depolarization $\ge \text{threshold}$, otherwise zeroed out. Uses a **Straight-Through Estimator (STE)** for clean training gradient flow.
+- **`DendriticModuleAdapter`**: Special subclass of `ModuleAdapter` that automatically detects model output dimensions statically (or dynamically on the first forward pass) and seamlessly appends dendritic context-gating onto the module's execution hook pipeline.
+- **`get_dendritic_status`**: Telemetry helper scanning modules recursively to report active vs. muted pathway percentages across all dendritic gates.
+
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).
 
 ---
@@ -143,3 +156,4 @@ For a full demo showing how to attach and run these components in an active trai
 ## License
 
 This project is licensed under the MIT License - see the LICENSE details.
+
