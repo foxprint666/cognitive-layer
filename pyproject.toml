@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cognitive-aug"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular brain-inspired cognitive augmentation layers for neural networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,4 +31,4 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["cognitive_aug"]
+packages = ["cognitive_aug", "gwt"]
