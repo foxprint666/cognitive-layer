@@ -6,10 +6,10 @@ This library provides plug-and-play components to endow existing deep learning a
 
 ---
 
-## Features (Phase v0.2 - Active Dendritic Gating)
+## Features (Phase v0.3 - Sleep & Memory Consolidation)
 
 * **Module Registry**: Track and coordinate active neural networks acting as specialized cognitive modules.
-* **Data Flow Manager**: High-performance, framework-integrated routing of latent representations across dynamic computation cycles.
+* **Data Flow Manager**: High-performance, framework-integrated routing of latent representations across dynamic computation cycles and salience caching.
 * **Global Workspace Theory (GWT) Layer**:
   - Configurable `single-slot` (high biological fidelity) and `multi-slot` (engineering focus) workspace bottleneck.
   - Pluggable `AttentionSelector` supporting Top-Down Key-Query matching and Bottom-Up salience selection.
@@ -20,12 +20,17 @@ This library provides plug-and-play components to endow existing deep learning a
   - **Modulatory Gain**: Smooth sigmoidal scaling mapping context directly to features.
   - **NMDA Threshold Spiking**: Sharp thresholding mimicking biological NMDA spikes (zeroing out inactive branches) with **Straight-Through Estimators (STE)** to ensure clean backpropagation.
   - **Telemetry Dashboard**: Dynamic pathway inspection and active/muted statistics.
+* **Sleep & Memory Consolidation (Phase v0.3)**:
+  - **`CognitiveReplayBuffer`**: Bounded episodic memory buffer storing high-salience waking transitions via O(1) detached clones to guarantee zero graph leaks.
+  - **`ConsolidationEngine`**: Offline Slow-Wave Sleep training cycle replaying high-salience experiences to reinforce GWT parameter routing under a joint reconstruction/stability loss.
+  - **Synaptic Homeostasis**: Structural pruning of weak dendritic branches with **backward gradient lockout hooks** that permanently sever parameter backprop paths.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
   - **Low-Overhead Salience**: `MagnitudeSalience` (L2 norm), `EntropySalience` (Shannon entropy confidence), and stateful `TemporalSurpriseSalience` (temporal cosine distance tracking).
   - **Decay Working Memory**: `DecayWorkingMemory` stateful wrapper with in-place exponential decay mutations and blended historical traces.
   - **Parallel Downstream Routing**: `CognitiveOutputRouter` broadcasting workspace representations back into multiple output heads in a single vectorized matrix projection pass.
+
 
 ---
 
@@ -148,6 +153,13 @@ Biologically-inspired active dendritic pre-processors that dynamically modulate 
   - `"nmda-threshold"`: Sharp thresholded biological spiking. Spikes if local depolarization $\ge \text{threshold}$, otherwise zeroed out. Uses a **Straight-Through Estimator (STE)** for clean training gradient flow.
 - **`DendriticModuleAdapter`**: Special subclass of `ModuleAdapter` that automatically detects model output dimensions statically (or dynamically on the first forward pass) and seamlessly appends dendritic context-gating onto the module's execution hook pipeline.
 - **`get_dendritic_status`**: Telemetry helper scanning modules recursively to report active vs. muted pathway percentages across all dendritic gates.
+
+### 6. Sleep & Memory Consolidation (`gwt/sleep.py`) [Phase v0.3]
+Offline Slow-Wave Sleep (SWS) and memory consolidation mechanisms to reinforce stable representations and enforce synaptic homeostasis:
+- **`CognitiveReplayBuffer`**: Bounded episodic memory buffer that detaches and clones waking states in $O(1)$ time, evicting the lowest-salience experiences when capacity is reached and sampling batch items prioritized by salience.
+- **`ConsolidationEngine`**: Offline slow-wave sleep training loop replaying prioritized experiences to GWT modules and minimizing a combined reconstruction and stability loss.
+- **`prune_dendrites`**: Synaptic pruning that zero-prunes or softly decays underperforming branches under `torch.no_grad()`, registering **backward hooks on parameter gradients** to permanently sever backpropagation through pruned channels.
+- **`engine.enter_sleep_phase()`**: Single command that caches waking activations, runs consolidation cycles, structurally prunes dead dendritic links, and flushes replay memory buffers.
 
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).
 
