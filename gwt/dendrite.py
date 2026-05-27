@@ -64,6 +64,14 @@ class ActiveDendriteGate(nn.Module):
         # Vectorized stacked linear projection mapping context -> branches * features
         self.context_proj = nn.Linear(context_dim, num_branches * feedforward_dim)
         
+        # Structural pruning masks to permanently sever pruned connections
+        self.register_buffer("pruning_mask", torch.ones_like(self.context_proj.weight.data))
+        self.context_proj.weight.register_hook(lambda grad: grad * self.pruning_mask)
+        
+        if self.context_proj.bias is not None:
+            self.register_buffer("bias_pruning_mask", torch.ones_like(self.context_proj.bias.data))
+            self.context_proj.bias.register_hook(lambda grad: grad * self.bias_pruning_mask)
+
         # Detached branch activation scores for telemetry / diagnostic dashboards
         # Shape: [B, num_branches, feedforward_dim]
         self.latest_branch_activations: Optional[torch.Tensor] = None

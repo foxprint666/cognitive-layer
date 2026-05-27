@@ -70,6 +70,7 @@ class DataFlowManager:
 
     def __init__(self) -> None:
         self._buffers: Dict[str, torch.Tensor] = {}
+        self._saliences: Dict[str, float] = {}
 
     def update_buffer(self, name: str, tensor: torch.Tensor) -> None:
         """Update the latent space buffer for a specific module."""
@@ -93,6 +94,23 @@ class DataFlowManager:
     def clear_buffers(self) -> None:
         """Clear all cached latent state buffers."""
         self._buffers.clear()
+        self._saliences.clear()
+
+    def update_salience(self, name: str, score: float) -> None:
+        """Update the salience score for a specific module."""
+        self._saliences[name] = float(score)
+
+    def get_salience(self, name: str) -> float:
+        """Retrieve the salience score for a specific module."""
+        return self._saliences.get(name, 0.0)
+
+    def list_saliences(self) -> Dict[str, float]:
+        """Get all current module saliences."""
+        return self._saliences
+
+    def clear_saliences(self) -> None:
+        """Clear all cached salience scores."""
+        self._saliences.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -425,6 +443,7 @@ class CognitiveAugEngine:
         self.registry: ModuleRegistry = ModuleRegistry()
         self.data_flow: DataFlowManager = DataFlowManager()
         self.workspace: Optional[nn.Module] = None
+        self.replay_buffer: Optional[Any] = None
 
     def register_module(
         self,
@@ -522,4 +541,115 @@ class CognitiveAugEngine:
         for adapter in adapters:
             adapter.receive_broadcast(broadcast_state)
 
+        # Record waking transition to episodic cache if buffer is attached (O(1) overhead)
+        if self.replay_buffer is not None:
+            self.record_transition()
+
         return broadcast_state
+
+    def attach_replay_buffer(self, replay_buffer: Any) -> None:
+        """Attach an episodic replay buffer to record waking transitions."""
+        self.replay_buffer = replay_buffer
+        logger.info("Successfully attached CognitiveReplayBuffer to CognitiveAugEngine.")
+
+    def record_transition(self) -> None:
+        """
+        Record the current step's latent states, GWT broadcast state, and salience
+        into the attached episodic replay buffer in O(1) time.
+        """
+        if self.replay_buffer is None:
+            return
+
+        adapters = self.registry.list_adapters()
+        if not adapters:
+            return
+
+        latent_states = {}
+        for adapter in adapters:
+            try:
+                # Retrieve detached waking latent outputs from buffer
+                latent_states[adapter.name] = self.data_flow.get_buffer(adapter.name).detach()
+            except KeyError:
+                continue
+
+        if not latent_states:
+            return
+
+        # Fetch latest global broadcast context (detached)
+        broadcast_state = adapters[0].get_last_broadcast().detach()
+
+        # Compute salience rank from DataFlowManager (defaulting to average L2 norm fallback)
+        saliences = self.data_flow.list_saliences()
+        if saliences:
+            total_salience = sum(saliences.values())
+        else:
+            # Fallback salience metric: mean L2 magnitude of latent states
+            total_salience = 0.0
+            for latent in latent_states.values():
+                total_salience += torch.linalg.vector_norm(latent.mean(dim=0)).item()
+
+        # Write to episodic buffer with detached elements (O(1) complexity)
+        self.replay_buffer.add_trace(latent_states, broadcast_state, total_salience)
+
+    def enter_sleep_phase(
+        self,
+        steps: int = 100,
+        learning_rate: float = 0.001,
+        pruning_threshold: float = 0.05,
+        batch_size: int = 32,
+    ) -> Dict[str, Any]:
+        """
+        Pauses online processing and executes an offline sleep and memory consolidation cycle.
+        
+        Replays high-salience experiences to stabilize GWT attention routing weights,
+        applies structural pruning to under-utilized dendritic branches (permanently
+        severing parameters and backprop gradients), and flushes the replay buffer.
+        
+        Args:
+            steps             : Number of slow-wave sleep steps.
+            learning_rate     : Learning rate for consolidation.
+            pruning_threshold : Average activation threshold below which dendritic branches are pruned.
+            batch_size        : Replay mini-batch size.
+            
+        Returns:
+            Telemetry dictionary summarizing replayed items, pruned branches, and loss delta.
+        """
+        if self.replay_buffer is None:
+            logger.warning("No replay buffer is attached. Sleep cycle aborted.")
+            return {
+                "memory_traces_replayed": 0,
+                "dendritic_branches_pruned": 0,
+                "loss_delta": 0.0,
+            }
+
+        # Lazy imports inside sleep phase boundary to guarantee zero circular import risks
+        from .sleep import ConsolidationEngine, prune_dendrites
+
+        # Cache the waking latest_branch_activations for each gate before they are overwritten by sleep cycle replays
+        waking_activations = {}
+        for adapter in self.registry.list_adapters():
+            if hasattr(adapter, "dendrite_gate") and adapter.dendrite_gate is not None:
+                if adapter.dendrite_gate.latest_branch_activations is not None:
+                    waking_activations[adapter.name] = adapter.dendrite_gate.latest_branch_activations.clone()
+
+        # 1. Initialize offline ConsolidationEngine and execute SWS cycles
+        consolidator = ConsolidationEngine(self, self.replay_buffer)
+        telemetry = consolidator.sleep_cycle(
+            steps=steps,
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+        )
+
+        # 2. Execute synaptic homeostasis: structural pruning of weak dendritic branches (using cached waking activations)
+        pruned_count = prune_dendrites(
+            self,
+            pruning_threshold=pruning_threshold,
+            waking_activations=waking_activations,
+        )
+        telemetry["dendritic_branches_pruned"] = pruned_count
+
+        # 3. Flush memory buffers to prepare for new learning cycles in waking state
+        self.replay_buffer.clear()
+        self.data_flow.clear_buffers()
+
+        return telemetry

@@ -25,6 +25,9 @@ from gwt import (
     ActiveDendriteGate,
     DendriticModuleAdapter,
     get_dendritic_status,
+    CognitiveReplayBuffer,
+    ConsolidationEngine,
+    prune_dendrites,
 )
 
 __all__ = [
@@ -47,5 +50,9 @@ __all__ = [
     "ActiveDendriteGate",
     "DendriticModuleAdapter",
     "get_dendritic_status",
+    "CognitiveReplayBuffer",
+    "ConsolidationEngine",
+    "prune_dendrites",
 ]
+
 

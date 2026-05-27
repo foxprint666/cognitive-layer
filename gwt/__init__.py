@@ -61,6 +61,13 @@ from .dendrite import (
     get_dendritic_status,
 )
 
+# ── Sleep & Memory Consolidation ──────────────────────────────────────────────
+from .sleep import (
+    CognitiveReplayBuffer,
+    ConsolidationEngine,
+    prune_dendrites,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -86,5 +93,10 @@ __all__ = [
     "ActiveDendriteGate",
     "DendriticModuleAdapter",
     "get_dendritic_status",
+    # Sleep & Memory Consolidation
+    "CognitiveReplayBuffer",
+    "ConsolidationEngine",
+    "prune_dendrites",
 ]
+
 
