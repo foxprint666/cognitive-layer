@@ -6,7 +6,7 @@ This library provides plug-and-play components to endow existing deep learning a
 
 ---
 
-## Features (Phase v0.3 - Sleep & Memory Consolidation)
+## Features (Phase v0.4 - Metacognitive Neuromodulation)
 
 * **Module Registry**: Track and coordinate active neural networks acting as specialized cognitive modules.
 * **Data Flow Manager**: High-performance, framework-integrated routing of latent representations across dynamic computation cycles and salience caching.
@@ -24,6 +24,11 @@ This library provides plug-and-play components to endow existing deep learning a
   - **`CognitiveReplayBuffer`**: Bounded episodic memory buffer storing high-salience waking transitions via O(1) detached clones to guarantee zero graph leaks.
   - **`ConsolidationEngine`**: Offline Slow-Wave Sleep training cycle replaying high-salience experiences to reinforce GWT parameter routing under a joint reconstruction/stability loss.
   - **Synaptic Homeostasis**: Structural pruning of weak dendritic branches with **backward gradient lockout hooks** that permanently sever parameter backprop paths.
+* **Metacognitive Neuromodulation (Phase v0.4)**:
+  - **`MetacognitiveMonitor`**: Fully gradient-free chemical controller (all logic runs under `torch.no_grad()`) that tracks surprise and entropy to drive two virtual neurotransmitter curves — **Norepinephrine (NE)** driven by temporal cosine-distance surprise, and **Acetylcholine (ACh)** driven by workspace entropy focus and top-down goal alignment.
+  - **`DynamicThresholdAdapter`**: Applies in-place modulations to the GWT ignition threshold and active dendritic gate parameters every step: `ignition_threshold = baseline − 0.4·NE + 0.3·ACh`, `nmda_threshold = baseline + 0.3·ACh`, sigmoid temperature `= 1.0 − 0.5·ACh`.
+  - **`engine.attach_neuromodulator(monitor)`**: One-line hook — thresholds self-tune every GWT cycle automatically.
+  - **`engine.inspect()`**: Prints a high-contrast ASCII diagnostic panel with live chemical progress bars: `[ ACh: ▇▇▇▇░░░░ 0.52 | NE: ▇▇░░░░░░ 0.21 ]`, module states, workspace slot info, and dendritic telemetry.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
@@ -160,6 +165,41 @@ Offline Slow-Wave Sleep (SWS) and memory consolidation mechanisms to reinforce s
 - **`ConsolidationEngine`**: Offline slow-wave sleep training loop replaying prioritized experiences to GWT modules and minimizing a combined reconstruction and stability loss.
 - **`prune_dendrites`**: Synaptic pruning that zero-prunes or softly decays underperforming branches under `torch.no_grad()`, registering **backward hooks on parameter gradients** to permanently sever backpropagation through pruned channels.
 - **`engine.enter_sleep_phase()`**: Single command that caches waking activations, runs consolidation cycles, structurally prunes dead dendritic links, and flushes replay memory buffers.
+
+### 7. Metacognitive Neuromodulation (`gwt/neuromod.py`) [Phase v0.4]
+Chemical neuromodulation controller that removes hardcoded thresholds and dynamically self-tunes GWT ignition and dendritic gating parameters:
+- **`MetacognitiveMonitor`**: Tracks real-time telemetry from `DataFlowManager` and computes exponential smoothing chemical curves under `torch.no_grad()`:
+  - **Norepinephrine (NE):** `NE_t = α_NE · NE_{t-1} + (1-α_NE) · Surprise_t` — surges on surprise spikes, decays back to baseline when inputs are predictable.
+  - **Acetylcholine (ACh):** `ACh_t = α_ACh · ACh_{t-1} + (1-α_ACh) · Focus_t` — rises on high target clarity and low workspace entropy, sharpening selective attention.
+- **`DynamicThresholdAdapter`**: Applies in-place modulations every step:
+  - GWT ignition threshold: `baseline − 0.4·NE + 0.3·ACh`
+  - NMDA spike threshold: `baseline_threshold + 0.3·ACh`
+  - Dendritic sigmoid temperature: `1.0 − 0.5·ACh`
+- **`engine.attach_neuromodulator(monitor)`**: One-line API to enable dynamic self-tuning.
+- **`engine.inspect()`**: High-contrast ASCII diagnostic panel with live chemical progress bars.
+
+```python
+from cognitive_aug.neuromod import MetacognitiveMonitor
+
+monitor = MetacognitiveMonitor(alpha_ne=0.8, alpha_ach=0.8)
+engine.attach_neuromodulator(monitor)
+
+# After running steps:
+print(engine.inspect())
+# ============================================================
+#          COGNITIVE ENGINE DIAGNOSTIC PANEL
+# ============================================================
+# Neuromodulator: Active
+#   [ ACh: ▇▇▇▇░░░░ 0.52 | NE: ▇▇░░░░░░ 0.21 ]
+# ------------------------------------------------------------
+# Registered Modules (1):
+#   - my_layer       [Dendritic Active:  72.4% | Pruned weights: 0]
+# ------------------------------------------------------------
+# Workspace: Attached
+#   - Slots: 1
+#   - Attention: key-query (threshold=0.2340)
+# ============================================================
+```
 
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).
 
