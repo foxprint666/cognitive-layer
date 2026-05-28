@@ -54,6 +54,7 @@ class ActiveDendriteGate(nn.Module):
         self.num_branches = num_branches
         self.spike_type = spike_type
         self.threshold = threshold
+        self.gain_temperature = 1.0
 
         if spike_type not in ["modulatory-gain", "nmda-threshold"]:
             raise ValueError(
@@ -83,7 +84,7 @@ class ActiveDendriteGate(nn.Module):
             context : [B, context_dim]          — incoming GWT broadcast tensor.
 
         Returns:
-            Gated features of same shape as x.
+            Gating features of same shape as x.
         """
         batch_size = x.shape[0]
 
@@ -93,7 +94,12 @@ class ActiveDendriteGate(nn.Module):
 
         # Reshape to separate dendritic branches: [B, num_branches, feedforward_dim]
         branch_raw = proj.view(batch_size, self.num_branches, self.feedforward_dim)
-        branch_score = torch.sigmoid(branch_raw)
+        
+        # Sigmoid gain temperature scaling (ACh focus modulation)
+        gain_temp = getattr(self, "gain_temperature", 1.0)
+        if isinstance(gain_temp, torch.Tensor):
+            gain_temp = gain_temp.to(device=branch_raw.device, dtype=branch_raw.dtype)
+        branch_score = torch.sigmoid(branch_raw / max(gain_temp, 1e-5))
 
         if self.spike_type == "modulatory-gain":
             branch_gates = branch_score

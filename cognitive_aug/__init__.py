@@ -28,6 +28,8 @@ from gwt import (
     CognitiveReplayBuffer,
     ConsolidationEngine,
     prune_dendrites,
+    MetacognitiveMonitor,
+    DynamicThresholdAdapter,
 )
 
 __all__ = [
@@ -53,6 +55,8 @@ __all__ = [
     "CognitiveReplayBuffer",
     "ConsolidationEngine",
     "prune_dendrites",
+    "MetacognitiveMonitor",
+    "DynamicThresholdAdapter",
 ]
 
 

@@ -416,6 +416,11 @@ class GlobalWorkspace(nn.Module):
 
         weights = self.selector(keys_stacked, query)    # [B, num_modules]
 
+        # Cache detached parameters for metacognitive neuromodulation telemetry
+        self.last_weights = weights.detach()
+        self.last_query = query.detach()
+        self.last_keys = keys_stacked.detach()
+
         if self.selection_mode == "hard":
             # Straight-through estimator: hard selection in forward, soft gradients
             winner_idx = torch.argmax(weights, dim=-1)
@@ -444,6 +449,70 @@ class CognitiveAugEngine:
         self.data_flow: DataFlowManager = DataFlowManager()
         self.workspace: Optional[nn.Module] = None
         self.replay_buffer: Optional[Any] = None
+        self.neuromodulator: Optional[Any] = None
+
+    def attach_neuromodulator(self, monitor: Any) -> None:
+        """Attach a MetacognitiveMonitor to dynamically tune GWT thresholds."""
+        self.neuromodulator = monitor
+        logger.info("Successfully attached MetacognitiveMonitor to CognitiveAugEngine.")
+
+    def inspect(self) -> str:
+        """
+        Builds a gorgeous diagnostic panel showing module states, GWT slot buffers,
+        dendritic telemetry, and chemical bars.
+        """
+        # Lazy import inside boundary to prevent circular dependencies
+        from .neuromod import make_ascii_bar
+
+        lines = []
+        lines.append("=" * 60)
+        lines.append("         COGNITIVE ENGINE DIAGNOSTIC PANEL")
+        lines.append("=" * 60)
+
+        # 1. Chemical Telemetry
+        if self.neuromodulator is not None:
+            chems = self.neuromodulator.get_chemical_levels()
+            lines.append("Neuromodulator: Active")
+            lines.append(f"  {chems['dashboard']}")
+        else:
+            lines.append("Neuromodulator: Inactive")
+        lines.append("-" * 60)
+
+        # 2. Registered Modules
+        adapters = self.registry.list_adapters()
+        lines.append(f"Registered Modules ({len(adapters)}):")
+        for adapter in adapters:
+            # Check if dendritic gate is present
+            gate = getattr(adapter, "dendrite_gate", None)
+            if gate is not None:
+                status = gate.get_status()
+                active_pct = status.get("active_pct", 0.0)
+                pruned_branches = 0
+                if hasattr(gate, "pruning_mask"):
+                    pruned_branches = int((gate.pruning_mask == 0).sum().item())
+                lines.append(
+                    f"  - {adapter.name:<15} [Dendritic Active: {active_pct:5.1f}% | "
+                    f"Pruned weights: {pruned_branches}]"
+                )
+            else:
+                lines.append(f"  - {adapter.name:<15} [Standard Layer]")
+        lines.append("-" * 60)
+
+        # 3. Workspace state
+        if self.workspace is not None:
+            lines.append("Workspace: Attached")
+            if hasattr(self.workspace, "broadcaster"):
+                slots = getattr(self.workspace.broadcaster, "workspace_slots", 1)
+                lines.append(f"  - Slots: {slots}")
+            if hasattr(self.workspace, "selector"):
+                sel_type = getattr(self.workspace.selector, "attention_type", "unknown")
+                thresh = getattr(self.workspace.selector, "ignition_threshold", 0.0)
+                lines.append(f"  - Attention: {sel_type} (threshold={thresh:.4f})")
+        else:
+            lines.append("Workspace: Unattached")
+        lines.append("=" * 60)
+
+        return "\n".join(lines)
 
     def register_module(
         self,
@@ -511,6 +580,20 @@ class CognitiveAugEngine:
         if not adapters:
             raise ValueError("No modules registered with the engine.")
 
+        # Self-healing alignment: Ensure all adapter key dimensions match workspace key_dim
+        if hasattr(self.workspace, "key_dim"):
+            target_key_dim = self.workspace.key_dim
+            for adapter in adapters:
+                if hasattr(adapter, "key_dim") and adapter.key_dim != target_key_dim:
+                    logger.info(
+                        f"Dynamic alignment: Re-projecting key space for module '{adapter.name}' "
+                        f"from {adapter.key_dim} to {target_key_dim} to match the workspace."
+                    )
+                    adapter.key_dim = target_key_dim
+                    device = next(adapter.parameters()).device if list(adapter.parameters()) else torch.device("cpu")
+                    dtype = next(adapter.parameters()).dtype if list(adapter.parameters()) else torch.float32
+                    adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(device=device, dtype=dtype)
+
         latent_states: Dict[str, torch.Tensor] = {}
         keys: Dict[str, torch.Tensor] = {}
 
@@ -535,6 +618,9 @@ class CognitiveAugEngine:
                 latent = torch.zeros(batch_size, adapter.latent_dim, device=device)
                 latent_states[adapter.name] = latent
                 keys[adapter.name] = adapter.get_key(latent)
+
+        if self.neuromodulator is not None:
+            self.neuromodulator.modulate(self)
 
         broadcast_state = self.workspace(latent_states, keys)
 

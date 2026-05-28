@@ -68,6 +68,12 @@ from .sleep import (
     prune_dendrites,
 )
 
+# ── Metacognitive Neuromodulation ─────────────────────────────────────────────
+from .neuromod import (
+    MetacognitiveMonitor,
+    DynamicThresholdAdapter,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -97,6 +103,9 @@ __all__ = [
     "CognitiveReplayBuffer",
     "ConsolidationEngine",
     "prune_dendrites",
+    # Metacognitive Neuromodulation
+    "MetacognitiveMonitor",
+    "DynamicThresholdAdapter",
 ]
 
 
