@@ -41,6 +41,12 @@ This library provides plug-and-play components to endow existing deep learning a
   - **`ConceptInterventionEngine` (Causal Overrides)**: Allows programmatically clamping concept activations (`set_intervention(concept_idx, forced_value)`) under `torch.no_grad()`, while using differentiable PyTorch selection to perfectly retain gradient paths on uninvolved concept nodes.
   - **`engine.attach_concept_layer(name, ConceptLayer(...))`**: Directly plugs into the GWT active buffers cache for real-time tracking.
   - **Conceptual maps**: Renders dynamically inside `.inspect()` showing active concept profiles and active causal override status tags: `- [Concept 1 (Noise Subtraction): ▇░░░░░░░ 0.12 (OVERRIDDEN -> 1.0)]`.
+* **The Cross-Modal Cognitive Crossbar (Phase v0.7)**:
+  - **`CognitiveCrossbar`**: Implements a parallel distributed routing bus that allows concurrent cross-modal message passing and dynamic binding using an optimized multi-slot attention routing crossbar.
+    - Parameterized affinity matrix (`binding_weight`) calculating query-key matching coefficients for slots simultaneously.
+    - Dynamic scaling driven by global neuromodulators (e.g. `ACh` focus scaling weights in-place).
+  - **`CrossbarModuleAdapter`**: Extends the adapter setup to allow any standard module to read from and write to a dedicated crossbar slot index during execution.
+  - **Crossbar Connectivity Map**: Displays a dynamic graph of modal connections and weights in `.inspect()`: `[Vision ── ▇▇▇▇░░░░ 0.54 ──> Text]`.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
@@ -258,6 +264,29 @@ Biologically-inspired conceptual abstraction layers implementing information bot
   Conceptual Maps:
     - [Saliency Core: ▇▇▇▇▇░░░ 0.61]
     - [Noise Subtraction: ▇▇▇▇▇▇▇▇ 1.00 (OVERRIDDEN -> 1.0)]
+  ```
+
+### 10. The Cross-Modal Cognitive Crossbar (`gwt/crossbar.py`) [Phase v0.7]
+Biologically-inspired parallel distributed routing bus enabling concurrent cross-modal message passing and dynamic binding:
+- **`CognitiveCrossbar`**: An optimized multi-slot attention routing crossbar that uses query, key, and value projections to perform all-to-all cross-attention across slot lines:
+  ```python
+  from gwt.crossbar import CognitiveCrossbar
+
+  crossbar = CognitiveCrossbar(slot_dim=256, num_slots=2, slot_names=["Vision", "Text"])
+  engine.attach_crossbar(crossbar)
+  ```
+- **`CrossbarModuleAdapter`**: Extends standard adapters to write features directly into a dedicated slot index, allowing modular interaction and receiving routed broadcasts:
+  ```python
+  from gwt.crossbar import CrossbarModuleAdapter
+
+  vis_adapter = CrossbarModuleAdapter("vision", vision_layer, 256, engine.data_flow, slot_idx=0)
+  engine.registry.register("vision", vis_adapter)
+  ```
+- **Diagnostics Integration**: Text-based connectivity maps are drawn dynamically inside `.inspect()`:
+  ```
+  Crossbar Connectivity Map:
+    [Vision   ── ▇▇▇▇░░░░ 0.54 ──> Text]
+    [Text     ── ▇▇▇▇▇▇░░ 0.78 ──> Concept]
   ```
 
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).

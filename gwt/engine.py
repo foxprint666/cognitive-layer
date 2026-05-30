@@ -452,6 +452,7 @@ class CognitiveAugEngine:
         self.neuromodulator: Optional[Any] = None
         self.glial_manager: Optional[Any] = None
         self.concept_layers: Dict[str, Any] = {}
+        self.crossbar: Optional[Any] = None
 
     def attach_neuromodulator(self, monitor: Any) -> None:
         """Attach a MetacognitiveMonitor to dynamically tune GWT thresholds."""
@@ -470,6 +471,15 @@ class CognitiveAugEngine:
         layer.name = name
         layer.data_flow = self.data_flow
         logger.info(f"Successfully attached ConceptLayer '{name}' to CognitiveAugEngine.")
+
+    def attach_crossbar(self, crossbar: Any) -> None:
+        """Attach a CognitiveCrossbar to dynamically route cross-modal states."""
+        self.crossbar = crossbar
+        crossbar.engine = self
+        for adapter in self.registry.list_adapters():
+            if hasattr(adapter, "slot_idx"):
+                adapter.engine = self
+        logger.info("Successfully attached CognitiveCrossbar to CognitiveAugEngine.")
 
     def inspect(self) -> str:
         """
@@ -557,6 +567,24 @@ class CognitiveAugEngine:
                         lines.append(f"  - [{name_str}: {bar} {val:.2f} (OVERRIDDEN -> {forced:.1f})]")
                     else:
                         lines.append(f"  - [{name_str}: {bar} {val:.2f}]")
+            lines.append("-" * 60)
+
+        # 5. Crossbar Connectivity Map
+        if self.crossbar is not None and self.crossbar.last_weights is not None:
+            lines.append("Crossbar Connectivity Map:")
+            weights = self.crossbar.last_weights
+            if weights.dim() == 3:
+                weights = weights.mean(dim=0)
+            
+            for i in range(self.crossbar.num_slots):
+                for j in range(self.crossbar.num_slots):
+                    if i != j:
+                        w = float(weights[i, j].item())
+                        if w > 0.01:
+                            bar = make_ascii_bar(w)
+                            src = self.crossbar.slot_names[i]
+                            tgt = self.crossbar.slot_names[j]
+                            lines.append(f"  [{src:<8} ── {bar} {w:.2f} ──> {tgt}]")
             lines.append("-" * 60)
 
         lines.append("=" * 60)
@@ -673,6 +701,18 @@ class CognitiveAugEngine:
 
         if self.glial_manager is not None:
             self.glial_manager.update(self)
+
+        # Perform Crossbar message passing if attached
+        if self.crossbar is not None:
+            for adapter in adapters:
+                if hasattr(adapter, "slot_idx"):
+                    adapter.engine = self
+            # Vectorized parallel routing
+            routed_latents = self.crossbar() # [B, num_slots, slot_dim]
+            # Distribute routed slot context back to their adapters as waking GWT context
+            for adapter in adapters:
+                if hasattr(adapter, "slot_idx"):
+                    adapter.receive_broadcast(routed_latents[:, adapter.slot_idx])
 
         broadcast_state = self.workspace(latent_states, keys)
 

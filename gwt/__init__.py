@@ -86,6 +86,12 @@ from .concept import (
     ConceptInterventionEngine,
 )
 
+# ── Cross-Modal Cognitive Crossbar ────────────────────────────────────────────
+from .crossbar import (
+    CognitiveCrossbar,
+    CrossbarModuleAdapter,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -124,6 +130,9 @@ __all__ = [
     # Concept-Level Representation and Abstraction Layer
     "ConceptLayer",
     "ConceptInterventionEngine",
+    # Cross-Modal Cognitive Crossbar
+    "CognitiveCrossbar",
+    "CrossbarModuleAdapter",
 ]
 
 

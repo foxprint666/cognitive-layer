@@ -34,6 +34,8 @@ from gwt import (
     GradientSanitizerHook,
     ConceptLayer,
     ConceptInterventionEngine,
+    CognitiveCrossbar,
+    CrossbarModuleAdapter,
 )
 
 __all__ = [
@@ -65,6 +67,8 @@ __all__ = [
     "GradientSanitizerHook",
     "ConceptLayer",
     "ConceptInterventionEngine",
+    "CognitiveCrossbar",
+    "CrossbarModuleAdapter",
 ]
 
 
