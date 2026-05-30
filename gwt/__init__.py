@@ -80,6 +80,12 @@ from .glia import (
     GradientSanitizerHook,
 )
 
+# ── Concept-Level Representation and Abstraction Layer ────────────────────────
+from .concept import (
+    ConceptLayer,
+    ConceptInterventionEngine,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -115,6 +121,9 @@ __all__ = [
     # Glial-Inspired Learning Regulation
     "AstrocyteManager",
     "GradientSanitizerHook",
+    # Concept-Level Representation and Abstraction Layer
+    "ConceptLayer",
+    "ConceptInterventionEngine",
 ]
 
 

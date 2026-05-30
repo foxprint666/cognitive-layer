@@ -36,6 +36,11 @@ This library provides plug-and-play components to endow existing deep learning a
     - Self-healing optimizer state updates that perfectly handle learning rate schedulers and manual LR adjustments.
   - **`GradientSanitizerHook` (Excitotoxicity Defense)**: Tracks gradient variance locally under `torch.no_grad()`. If a sudden gradient norm spike is detected, it isolatedly damps gradients for *only that specific subsystem*, preventing catastrophic gradient explosions from disrupting the rest of the architecture.
   - **Dynamic Stabilization Profile**: Fully integrated into the `.inspect()` panel: `- toy [Dendritic Active: 72.4% | Local Plasticity: 0.5x 🔒 | Grad Status: Stable]`
+* **Concept-Level Representation and Abstraction Layer (Phase v0.6)**:
+  - **`ConceptLayer`**: Implements a conceptual bottleneck projecting high-dimensional hidden representations into low-dimensional concept vectors with activations in $[0, 1]$. Supports four projection modes: `'projection'` (default), `'linear'`, `'softmax'`, and `'threshold'` (with STE).
+  - **`ConceptInterventionEngine` (Causal Overrides)**: Allows programmatically clamping concept activations (`set_intervention(concept_idx, forced_value)`) under `torch.no_grad()`, while using differentiable PyTorch selection to perfectly retain gradient paths on uninvolved concept nodes.
+  - **`engine.attach_concept_layer(name, ConceptLayer(...))`**: Directly plugs into the GWT active buffers cache for real-time tracking.
+  - **Conceptual maps**: Renders dynamically inside `.inspect()` showing active concept profiles and active causal override status tags: `- [Concept 1 (Noise Subtraction): ▇░░░░░░░ 0.12 (OVERRIDDEN -> 1.0)]`.
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
@@ -225,6 +230,34 @@ Biologically-inspired glial tripartite synapse regulators implementing metaplast
 - **Diagnostics Integration**: Telemetry is fully displayed in the engine's `.inspect()` diagnostic panel:
   ```
   - toy             [Dendritic Active:  72.4% | Local Plasticity: 0.5x 🔒 | Grad Status: Stable | Pruned weights: 0]
+  ```
+
+### 9. Concept-Level Representation and Abstraction Layer (`gwt/concept.py`) [Phase v0.6]
+Biologically-inspired conceptual abstraction layers implementing information bottleneck projections and causal interventions:
+- **`ConceptLayer`**: Projects high-dimensional tensors into low-dimensional concept activation scores in $[0, 1]$:
+  ```python
+  from gwt.concept import ConceptLayer
+
+  concept_names = ["Saliency Core", "Noise Subtraction"]
+  layer = ConceptLayer(input_dim=256, num_concepts=2, abstraction_type="projection", concept_names=concept_names)
+  engine.attach_concept_layer("concept_bottleneck", layer)
+  
+  # Run standard forward step (propagates gradients perfectly and updates data_flow buffers)
+  concept_activations = layer(hidden_states)
+  ```
+- **`ConceptInterventionEngine`**: Programmatic override manager that clamps activation scores under `torch.no_grad()` while fully preserving gradient flow on uninvolved channels using autograd-friendly masking:
+  ```python
+  # Force "Noise Subtraction" (index 1) to be active (1.0)
+  layer.intervention_engine.set_intervention(1, 1.0)
+  
+  # Forward passes will now output exactly 1.0 for index 1, while detaching its gradient
+  # and retaining perfect backprop paths on index 0!
+  ```
+- **Diagnostics Integration**: Telemetry is rendered in real-time in the engine's `.inspect()` diagnostic panel:
+  ```
+  Conceptual Maps:
+    - [Saliency Core: ▇▇▇▇▇░░░ 0.61]
+    - [Noise Subtraction: ▇▇▇▇▇▇▇▇ 1.00 (OVERRIDDEN -> 1.0)]
   ```
 
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).

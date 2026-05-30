@@ -451,6 +451,7 @@ class CognitiveAugEngine:
         self.replay_buffer: Optional[Any] = None
         self.neuromodulator: Optional[Any] = None
         self.glial_manager: Optional[Any] = None
+        self.concept_layers: Dict[str, Any] = {}
 
     def attach_neuromodulator(self, monitor: Any) -> None:
         """Attach a MetacognitiveMonitor to dynamically tune GWT thresholds."""
@@ -462,6 +463,13 @@ class CognitiveAugEngine:
         self.glial_manager = manager
         manager.attach(self)
         logger.info("Successfully attached AstrocyteManager to CognitiveAugEngine.")
+
+    def attach_concept_layer(self, name: str, layer: Any) -> None:
+        """Attach a ConceptLayer to the engine."""
+        self.concept_layers[name] = layer
+        layer.name = name
+        layer.data_flow = self.data_flow
+        logger.info(f"Successfully attached ConceptLayer '{name}' to CognitiveAugEngine.")
 
     def inspect(self) -> str:
         """
@@ -527,6 +535,30 @@ class CognitiveAugEngine:
                 lines.append(f"  - Attention: {sel_type} (threshold={thresh:.4f})")
         else:
             lines.append("Workspace: Unattached")
+        lines.append("-" * 60)
+
+        # 4. Conceptual Maps
+        if self.concept_layers:
+            lines.append("Conceptual Maps:")
+            for layer_name, layer in self.concept_layers.items():
+                try:
+                    activations = self.data_flow.get_buffer(layer_name)
+                    mean_acts = activations.view(-1, layer.num_concepts).mean(dim=0)
+                except KeyError:
+                    mean_acts = torch.zeros(layer.num_concepts)
+
+                interventions = layer.intervention_engine.get_interventions()
+                for i in range(layer.num_concepts):
+                    val = float(mean_acts[i].item())
+                    bar = make_ascii_bar(val)
+                    name_str = layer.concept_names[i]
+                    if i in interventions:
+                        forced = interventions[i]
+                        lines.append(f"  - [{name_str}: {bar} {val:.2f} (OVERRIDDEN -> {forced:.1f})]")
+                    else:
+                        lines.append(f"  - [{name_str}: {bar} {val:.2f}]")
+            lines.append("-" * 60)
+
         lines.append("=" * 60)
 
         return "\n".join(lines)

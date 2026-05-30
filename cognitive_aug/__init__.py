@@ -32,6 +32,8 @@ from gwt import (
     DynamicThresholdAdapter,
     AstrocyteManager,
     GradientSanitizerHook,
+    ConceptLayer,
+    ConceptInterventionEngine,
 )
 
 __all__ = [
@@ -61,6 +63,8 @@ __all__ = [
     "DynamicThresholdAdapter",
     "AstrocyteManager",
     "GradientSanitizerHook",
+    "ConceptLayer",
+    "ConceptInterventionEngine",
 ]
 
 
