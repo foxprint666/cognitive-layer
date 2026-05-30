@@ -29,6 +29,13 @@ This library provides plug-and-play components to endow existing deep learning a
   - **`DynamicThresholdAdapter`**: Applies in-place modulations to the GWT ignition threshold and active dendritic gate parameters every step: `ignition_threshold = baseline − 0.4·NE + 0.3·ACh`, `nmda_threshold = baseline + 0.3·ACh`, sigmoid temperature `= 1.0 − 0.5·ACh`.
   - **`engine.attach_neuromodulator(monitor)`**: One-line hook — thresholds self-tune every GWT cycle automatically.
   - **`engine.inspect()`**: Prints a high-contrast ASCII diagnostic panel with live chemical progress bars: `[ ACh: ▇▇▇▇░░░░ 0.52 | NE: ▇▇░░░░░░ 0.21 ]`, module states, workspace slot info, and dendritic telemetry.
+* **Glial-Inspired Learning Regulation (Phase v0.5)**:
+  - **`AstrocyteManager`**: Tripartite synapse layer implementing metaplasticity and dynamic learning rate regulation based on global neurotransmitters (`ACh`, `NE`) and running exponential moving average (EMA) of module saliences.
+    - High ACh (focus) + Low NE (surprise) = lock stable memory weights (scale LR by 0.5x 🔒).
+    - High NE (surprise) + High salience = unlock weights to accelerate learning (scale LR by 1.5x 🔓).
+    - Self-healing optimizer state updates that perfectly handle learning rate schedulers and manual LR adjustments.
+  - **`GradientSanitizerHook` (Excitotoxicity Defense)**: Tracks gradient variance locally under `torch.no_grad()`. If a sudden gradient norm spike is detected, it isolatedly damps gradients for *only that specific subsystem*, preventing catastrophic gradient explosions from disrupting the rest of the architecture.
+  - **Dynamic Stabilization Profile**: Fully integrated into the `.inspect()` panel: `- toy [Dendritic Active: 72.4% | Local Plasticity: 0.5x 🔒 | Grad Status: Stable]`
 * **Non-Intrusive Wrappers**: `ModuleAdapter` wraps standard PyTorch `nn.Module`s using forward/backward hooks without polluting or altering original model classes.
 * **Optimized Cognitive Add-ons**:
   - **Differentiable Selection**: `CosineSimilaritySelector`, `VectorizedCrossAttentionSelector` (using native FlashAttention speeds), and `EfficientGumbelSoftmaxSelector` (hard winner-take-all routing).
@@ -200,6 +207,25 @@ print(engine.inspect())
 #   - Attention: key-query (threshold=0.2340)
 # ============================================================
 ```
+
+### 8. Glial-Inspired Learning Regulation (`gwt/glia.py`) [Phase v0.5]
+Biologically-inspired glial tripartite synapse regulators implementing metaplasticity and gradient excitotoxicity protection:
+- **`AstrocyteManager`**: Vectorized learning rate modifier. Integrates with existing PyTorch optimizers and updates group learning rates in-place dynamically:
+  ```python
+  from gwt.glia import AstrocyteManager
+
+  manager = AstrocyteManager(lr_lock_scale=0.5, lr_unlock_scale=1.5)
+  engine.attach_glial_manager(manager)
+
+  # In the training loop before calling optimizer.step():
+  manager.adjust_learning_rates(optimizer)
+  optimizer.step()
+  ```
+- **`GradientSanitizerHook`**: An excitotoxicity defense layer that registers backward hooks on all parameters of a wrapped subsystem to track running norm variance under `torch.no_grad()`. When a local gradient norm exceeds the running mean by more than `max_variance_threshold` standard deviations, the hook dampens only that subsystem's gradients (e.g. by `0.2x`), leaving the rest of the network completely unaffected and stable.
+- **Diagnostics Integration**: Telemetry is fully displayed in the engine's `.inspect()` diagnostic panel:
+  ```
+  - toy             [Dendritic Active:  72.4% | Local Plasticity: 0.5x 🔒 | Grad Status: Stable | Pruned weights: 0]
+  ```
 
 For a full demo showing how to attach and run these components in an active training loop, see [example_addons.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/example_addons.py).
 

@@ -30,6 +30,8 @@ from gwt import (
     prune_dendrites,
     MetacognitiveMonitor,
     DynamicThresholdAdapter,
+    AstrocyteManager,
+    GradientSanitizerHook,
 )
 
 __all__ = [
@@ -57,6 +59,8 @@ __all__ = [
     "prune_dendrites",
     "MetacognitiveMonitor",
     "DynamicThresholdAdapter",
+    "AstrocyteManager",
+    "GradientSanitizerHook",
 ]
 
 

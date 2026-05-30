@@ -74,6 +74,12 @@ from .neuromod import (
     DynamicThresholdAdapter,
 )
 
+# ── Glial-Inspired Learning Regulation ────────────────────────────────────────
+from .glia import (
+    AstrocyteManager,
+    GradientSanitizerHook,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -106,6 +112,9 @@ __all__ = [
     # Metacognitive Neuromodulation
     "MetacognitiveMonitor",
     "DynamicThresholdAdapter",
+    # Glial-Inspired Learning Regulation
+    "AstrocyteManager",
+    "GradientSanitizerHook",
 ]
 
 

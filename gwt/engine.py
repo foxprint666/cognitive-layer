@@ -450,11 +450,18 @@ class CognitiveAugEngine:
         self.workspace: Optional[nn.Module] = None
         self.replay_buffer: Optional[Any] = None
         self.neuromodulator: Optional[Any] = None
+        self.glial_manager: Optional[Any] = None
 
     def attach_neuromodulator(self, monitor: Any) -> None:
         """Attach a MetacognitiveMonitor to dynamically tune GWT thresholds."""
         self.neuromodulator = monitor
         logger.info("Successfully attached MetacognitiveMonitor to CognitiveAugEngine.")
+
+    def attach_glial_manager(self, manager: Any) -> None:
+        """Attach an AstrocyteManager to dynamically track saliences and stabilize gradients."""
+        self.glial_manager = manager
+        manager.attach(self)
+        logger.info("Successfully attached AstrocyteManager to CognitiveAugEngine.")
 
     def inspect(self) -> str:
         """
@@ -482,6 +489,16 @@ class CognitiveAugEngine:
         adapters = self.registry.list_adapters()
         lines.append(f"Registered Modules ({len(adapters)}):")
         for adapter in adapters:
+            # Retrieve glia stabilization telemetry if attached
+            glia_info = ""
+            if self.glial_manager is not None:
+                scale = self.glial_manager._plasticity_scales.get(adapter.name, 1.0)
+                hook = self.glial_manager._sanitizer_hooks.get(adapter.name)
+                grad_status = hook.grad_status if hook is not None else "Stable"
+                lock_char = "🔒" if scale < 0.9 else ("🔓" if scale > 1.1 else "")
+                lock_str = f" {lock_char}" if lock_char else ""
+                glia_info = f" | Local Plasticity: {scale:.1f}x{lock_str} | Grad Status: {grad_status}"
+
             # Check if dendritic gate is present
             gate = getattr(adapter, "dendrite_gate", None)
             if gate is not None:
@@ -491,11 +508,11 @@ class CognitiveAugEngine:
                 if hasattr(gate, "pruning_mask"):
                     pruned_branches = int((gate.pruning_mask == 0).sum().item())
                 lines.append(
-                    f"  - {adapter.name:<15} [Dendritic Active: {active_pct:5.1f}% | "
+                    f"  - {adapter.name:<15} [Dendritic Active: {active_pct:5.1f}%{glia_info} | "
                     f"Pruned weights: {pruned_branches}]"
                 )
             else:
-                lines.append(f"  - {adapter.name:<15} [Standard Layer]")
+                lines.append(f"  - {adapter.name:<15} [Standard Layer{glia_info}]")
         lines.append("-" * 60)
 
         # 3. Workspace state
@@ -621,6 +638,9 @@ class CognitiveAugEngine:
 
         if self.neuromodulator is not None:
             self.neuromodulator.modulate(self)
+
+        if self.glial_manager is not None:
+            self.glial_manager.update(self)
 
         broadcast_state = self.workspace(latent_states, keys)
 
