@@ -185,6 +185,10 @@ class ModuleAdapter(nn.Module):
                     f"got {type(outputs)}"
                 )
 
+            # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
+            from .salience import global_pool_latent
+            latent = global_pool_latent(latent)
+
             if self.projection is not None:
                 latent = self.projection(latent)
 
@@ -200,7 +204,7 @@ class ModuleAdapter(nn.Module):
 
     def receive_broadcast(self, broadcast_state: torch.Tensor) -> None:
         """Called by CognitiveAugEngine to deliver the latest workspace broadcast."""
-        self.last_broadcast = broadcast_state.clone()
+        self.last_broadcast = broadcast_state.detach().clone()
         logger.debug(f"Module '{self.name}' received workspace broadcast.")
 
     def get_last_broadcast(self) -> torch.Tensor:

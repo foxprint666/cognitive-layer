@@ -176,6 +176,10 @@ class CrossbarModuleAdapter(ModuleAdapter):
                     f"Expected tensor output from module '{self.name}', got {type(outputs)}"
                 )
 
+            # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
+            from .salience import global_pool_latent
+            latent = global_pool_latent(latent)
+
             # Optional projection layer
             if self.projection is not None:
                 latent = self.projection(latent)

@@ -338,11 +338,13 @@ class DendriticModuleAdapter(ModuleAdapter):
             # 5. Apply dendritic gating element-wise onto features
             gated_latent = self.dendrite_gate(latent, context)
 
+            # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
+            from .salience import global_pool_latent
+            gwt_latent = global_pool_latent(gated_latent)
+
             # 6. Apply optional learnable projection to workspace dimension
             if self.projection is not None:
-                gwt_latent = self.projection(gated_latent)
-            else:
-                gwt_latent = gated_latent
+                gwt_latent = self.projection(gwt_latent)
 
             # Store the GWT representation inside the DataFlowManager
             self.data_flow.update_buffer(self.name, gwt_latent)
