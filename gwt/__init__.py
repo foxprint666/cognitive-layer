@@ -92,6 +92,35 @@ from .crossbar import (
     CrossbarModuleAdapter,
 )
 
+# ── Distributed State Stores (Phase v0.8 Enterprise) ──────────────────────────
+from .state import (
+    BaseStateStore,
+    BaseReplayBufferStore,
+    InMemoryStateStore,
+    InMemoryReplayBufferStore,
+    RedisStateStore,
+    RedisReplayBufferStore,
+)
+
+# ── Asynchronous Execution Task Workers ───────────────────────────────────────
+from .async_tasks import (
+    start_async_worker,
+    stop_async_worker,
+    offloaded_enter_sleep_phase,
+)
+
+# ── Selective Hooking & Profiling ─────────────────────────────────────────────
+from .profiler import (
+    profile_submodules,
+    register_selective_hooks,
+)
+
+# ── OpenTelemetry Observability Telemetry ──────────────────────────────────────
+from .telemetry import (
+    GWTTelemetryLogger,
+    get_telemetry_logger,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -133,6 +162,23 @@ __all__ = [
     # Cross-Modal Cognitive Crossbar
     "CognitiveCrossbar",
     "CrossbarModuleAdapter",
+    # Distributed State Stores (Phase v0.8 Enterprise)
+    "BaseStateStore",
+    "BaseReplayBufferStore",
+    "InMemoryStateStore",
+    "InMemoryReplayBufferStore",
+    "RedisStateStore",
+    "RedisReplayBufferStore",
+    # Asynchronous Workers
+    "start_async_worker",
+    "stop_async_worker",
+    "offloaded_enter_sleep_phase",
+    # Selective Hooking & Profiling
+    "profile_submodules",
+    "register_selective_hooks",
+    # Observability Telemetry
+    "GWTTelemetryLogger",
+    "get_telemetry_logger",
 ]
 
 

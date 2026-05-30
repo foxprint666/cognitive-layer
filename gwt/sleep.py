@@ -27,20 +27,28 @@ logger = logging.getLogger(__name__)
 
 class CognitiveReplayBuffer:
     """
-    Lightweight, bounded episodic cache that stores high-salience waking transitions.
+    Episodic cache storing GWT waking transition traces.
     
-    To prevent memory leaks and graph build-ups, it explicitly detaches and clones
-    all stored tensors. Evicts the lowest-salience trace when size exceeds max_size,
-    ensuring that only highly salient experiences are retained.
+    Delegates dynamically to a ReplayBufferStore (local in-memory or distributed Redis)
+    to prevent local process RAM bloating and support multi-pod shared experiences.
     """
 
-    def __init__(self, max_size: int = 1000) -> None:
+    def __init__(self, max_size: int = 1000, store: Optional[Any] = None) -> None:
         """
         Args:
-            max_size: Maximum capacity of the replay buffer.
+            max_size : Maximum capacity of the replay buffer.
+            store    : Optional ReplayBufferStore backend instance.
         """
+        from .state import InMemoryReplayBufferStore
         self.max_size = max_size
-        self.buffer: List[Dict[str, Any]] = []
+        self.store = store if store is not None else InMemoryReplayBufferStore(max_size)
+
+    @property
+    def buffer(self) -> List[Dict[str, Any]]:
+        """Provides direct backward-compatible access to the store's local trace list."""
+        if hasattr(self.store, "buffer"):
+            return self.store.buffer
+        return []
 
     def add_trace(
         self,
@@ -49,9 +57,7 @@ class CognitiveReplayBuffer:
         salience: float,
     ) -> None:
         """
-        Inserts a detached transition trace into the episodic cache in O(1) time.
-        
-        If the buffer is full, the trace with the lowest salience is evicted.
+        Inserts a detached transition trace into the episodic store.
         
         Args:
             latent_states : Dictionary of `{module_name: latent_tensor}`.
@@ -67,43 +73,18 @@ class CognitiveReplayBuffer:
             "context": detached_context,
             "salience": float(salience),
         }
-
-        # O(1) append
-        self.buffer.append(trace)
-
-        # Evict the least salient trace if bounded capacity is exceeded
-        if len(self.buffer) > self.max_size:
-            min_idx = min(range(len(self.buffer)), key=lambda i: self.buffer[i]["salience"])
-            self.buffer.pop(min_idx)
+        self.store.add_trace(trace)
 
     def sample_batch(self, batch_size: int) -> List[Dict[str, Any]]:
-        """
-        Samples a batch of experiences prioritized by their salience scores.
-        
-        Args:
-            batch_size: Number of traces to sample.
-            
-        Returns:
-            List of sampled experience dictionaries.
-        """
-        if not self.buffer:
-            return []
-
-        # Compute prioritized sampling distribution via stable softmax over saliences
-        saliences = torch.tensor([t["salience"] for t in self.buffer], dtype=torch.float32)
-        saliences = saliences - saliences.max()  # Numerical stability
-        probs = torch.softmax(saliences, dim=0)
-
-        # Draw indices with replacement (supports batch_size larger than buffer capacity)
-        indices = torch.multinomial(probs, num_samples=batch_size, replacement=True)
-        return [self.buffer[i] for i in indices.tolist()]
+        """Samples a batch of experiences prioritized by their salience scores."""
+        return self.store.sample_batch(batch_size)
 
     def clear(self) -> None:
         """Flushes the replay buffer."""
-        self.buffer.clear()
+        self.store.clear()
 
     def __len__(self) -> int:
-        return len(self.buffer)
+        return len(self.store)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

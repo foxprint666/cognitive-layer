@@ -66,51 +66,48 @@ class DataFlowManager:
     """
     Manages communication buffers, dynamic latent spaces, and shapes of all
     registered modules. Ensures high-performance tensor transfers and routing.
+    
+    Delegates dynamically to a GWT StateStore (local or distributed Redis) to
+    support horizontally scaled application pods safely.
     """
 
-    def __init__(self) -> None:
-        self._buffers: Dict[str, torch.Tensor] = {}
-        self._saliences: Dict[str, float] = {}
+    def __init__(self, state_store: Optional[Any] = None) -> None:
+        from .state import InMemoryStateStore
+        self._state_store = state_store if state_store is not None else InMemoryStateStore()
 
     def update_buffer(self, name: str, tensor: torch.Tensor) -> None:
         """Update the latent space buffer for a specific module."""
         if not isinstance(tensor, torch.Tensor):
             raise TypeError("Buffer content must be a PyTorch Tensor.")
-        self._buffers[name] = tensor
+        self._state_store.update_buffer(name, tensor)
 
     def get_buffer(self, name: str) -> torch.Tensor:
         """Retrieve the latent space buffer for a specific module."""
-        if name not in self._buffers:
-            raise KeyError(
-                f"No latent buffer found for module '{name}'. "
-                "Ensure the module has run a forward pass."
-            )
-        return self._buffers[name]
+        return self._state_store.get_buffer(name)
 
     def list_buffers(self) -> Dict[str, torch.Tensor]:
         """Get all current module latent buffers."""
-        return self._buffers
+        return self._state_store.list_buffers()
 
     def clear_buffers(self) -> None:
-        """Clear all cached latent state buffers."""
-        self._buffers.clear()
-        self._saliences.clear()
+        """Clear all cached latent state buffers and saliences."""
+        self._state_store.clear()
 
     def update_salience(self, name: str, score: float) -> None:
         """Update the salience score for a specific module."""
-        self._saliences[name] = float(score)
+        self._state_store.update_salience(name, score)
 
     def get_salience(self, name: str) -> float:
         """Retrieve the salience score for a specific module."""
-        return self._saliences.get(name, 0.0)
+        return self._state_store.get_salience(name)
 
     def list_saliences(self) -> Dict[str, float]:
         """Get all current module saliences."""
-        return self._saliences
+        return self._state_store.list_saliences()
 
     def clear_saliences(self) -> None:
         """Clear all cached salience scores."""
-        self._saliences.clear()
+        self._state_store.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -170,29 +167,38 @@ class ModuleAdapter(nn.Module):
         self._register_forward_hook()
 
     def _register_forward_hook(self) -> None:
-        """Register a PyTorch forward hook to intercept latent outputs."""
+        """Register a PyTorch forward hook to intercept latent outputs with strict fault tolerance."""
 
         def hook_fn(module: nn.Module, inputs: Any, outputs: Any) -> Any:
-            # Unwrap tuple/list outputs (e.g. LSTM hidden states)
-            if isinstance(outputs, (tuple, list)):
-                latent = outputs[0]
-            else:
-                latent = outputs
+            try:
+                # Unwrap tuple/list outputs (e.g. LSTM hidden states)
+                if isinstance(outputs, (tuple, list)):
+                    latent = outputs[0]
+                else:
+                    latent = outputs
 
-            if not isinstance(latent, torch.Tensor):
-                raise TypeError(
-                    f"Expected tensor output from module '{self.name}', "
-                    f"got {type(outputs)}"
+                if not isinstance(latent, torch.Tensor):
+                    raise TypeError(
+                        f"Expected tensor output from module '{self.name}', "
+                        f"got {type(outputs)}"
+                    )
+
+                # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
+                from .salience import global_pool_latent
+                latent = global_pool_latent(latent)
+
+                if self.projection is not None:
+                    latent = self.projection(latent)
+
+                self.data_flow.update_buffer(self.name, latent)
+            except Exception as e:
+                # Graceful fallback: log the error and bypass GWT, returning base outputs unmodified
+                from .telemetry import get_telemetry_logger
+                get_telemetry_logger().record_error(
+                    error_msg=str(e),
+                    phase="ModuleAdapter Forward Hook Interception",
+                    details=f"Gracefully bypassing GWT for module '{self.name}'."
                 )
-
-            # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
-            from .salience import global_pool_latent
-            latent = global_pool_latent(latent)
-
-            if self.projection is not None:
-                latent = self.projection(latent)
-
-            self.data_flow.update_buffer(self.name, latent)
             return outputs  # always return original outputs unmodified
 
         self._hook_handle = self.module.register_forward_hook(hook_fn)
@@ -457,6 +463,7 @@ class CognitiveAugEngine:
         self.glial_manager: Optional[Any] = None
         self.concept_layers: Dict[str, Any] = {}
         self.crossbar: Optional[Any] = None
+        self._step_counter: int = 0
 
     def attach_neuromodulator(self, monitor: Any) -> None:
         """Attach a MetacognitiveMonitor to dynamically tune GWT thresholds."""
@@ -648,86 +655,169 @@ class CognitiveAugEngine:
         1. Collect latent states from every registered module's buffer.
         2. Feed states + keys to the GlobalWorkspace (selection & broadcast).
         3. Distribute the broadcast state back to all ModuleAdapters.
+        4. Log structured OpenTelemetry-compatible JSON metrics.
 
         Returns:
             Broadcasted workspace state tensor [B, latent_dim].
         """
-        if self.workspace is None:
-            raise ValueError(
-                "No workspace attached. Call `attach_workspace` before stepping."
-            )
+        try:
+            if self.workspace is None:
+                raise ValueError(
+                    "No workspace attached. Call `attach_workspace` before stepping."
+                )
 
-        adapters = self.registry.list_adapters()
-        if not adapters:
-            raise ValueError("No modules registered with the engine.")
+            adapters = self.registry.list_adapters()
+            if not adapters:
+                raise ValueError("No modules registered with the engine.")
 
-        # Self-healing alignment: Ensure all adapter key dimensions match workspace key_dim
-        if hasattr(self.workspace, "key_dim"):
-            target_key_dim = self.workspace.key_dim
+            # Self-healing alignment: Ensure all adapter key dimensions match workspace key_dim
+            if hasattr(self.workspace, "key_dim"):
+                target_key_dim = self.workspace.key_dim
+                for adapter in adapters:
+                    if hasattr(adapter, "key_dim") and adapter.key_dim != target_key_dim:
+                        logger.info(
+                            f"Dynamic alignment: Re-projecting key space for module '{adapter.name}' "
+                            f"from {adapter.key_dim} to {target_key_dim} to match the workspace."
+                        )
+                        adapter.key_dim = target_key_dim
+                        device = next(adapter.parameters()).device if list(adapter.parameters()) else torch.device("cpu")
+                        dtype = next(adapter.parameters()).dtype if list(adapter.parameters()) else torch.float32
+                        adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(device=device, dtype=dtype)
+
+            latent_states: Dict[str, torch.Tensor] = {}
+            keys: Dict[str, torch.Tensor] = {}
+
             for adapter in adapters:
-                if hasattr(adapter, "key_dim") and adapter.key_dim != target_key_dim:
-                    logger.info(
-                        f"Dynamic alignment: Re-projecting key space for module '{adapter.name}' "
-                        f"from {adapter.key_dim} to {target_key_dim} to match the workspace."
+                try:
+                    latent = self.data_flow.get_buffer(adapter.name)
+                    latent_states[adapter.name] = latent
+                    keys[adapter.name] = adapter.get_key(latent)
+                except KeyError:
+                    logger.warning(
+                        f"Module '{adapter.name}' has not run a forward pass this step. "
+                        "Falling back to zero latent vector."
                     )
-                    adapter.key_dim = target_key_dim
-                    device = next(adapter.parameters()).device if list(adapter.parameters()) else torch.device("cpu")
-                    dtype = next(adapter.parameters()).dtype if list(adapter.parameters()) else torch.float32
-                    adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(device=device, dtype=dtype)
+                    batch_size = next(
+                        (b.shape[0] for b in self.data_flow.list_buffers().values()), 1
+                    )
+                    device = (
+                        next(adapter.module.parameters()).device
+                        if list(adapter.module.parameters())
+                        else torch.device("cpu")
+                    )
+                    latent = torch.zeros(batch_size, adapter.latent_dim, device=device)
+                    latent_states[adapter.name] = latent
+                    keys[adapter.name] = adapter.get_key(latent)
 
-        latent_states: Dict[str, torch.Tensor] = {}
-        keys: Dict[str, torch.Tensor] = {}
+            if self.neuromodulator is not None:
+                self.neuromodulator.modulate(self)
 
-        for adapter in adapters:
+            if self.glial_manager is not None:
+                self.glial_manager.update(self)
+
+            # Perform Crossbar message passing if attached
+            if self.crossbar is not None:
+                for adapter in adapters:
+                    if hasattr(adapter, "slot_idx"):
+                        adapter.engine = self
+                # Vectorized parallel routing
+                routed_latents = self.crossbar() # [B, num_slots, slot_dim]
+                # Distribute routed slot context back to their adapters as waking GWT context
+                for adapter in adapters:
+                    if hasattr(adapter, "slot_idx"):
+                        adapter.receive_broadcast(routed_latents[:, adapter.slot_idx])
+
+            broadcast_state = self.workspace(latent_states, keys)
+
+            for adapter in adapters:
+                adapter.receive_broadcast(broadcast_state)
+
+            # Record waking transition to episodic cache if buffer is attached (O(1) overhead)
+            if self.replay_buffer is not None:
+                self.record_transition()
+
+            # ── Enterprise Telemetry Logging ──
             try:
-                latent = self.data_flow.get_buffer(adapter.name)
-                latent_states[adapter.name] = latent
-                keys[adapter.name] = adapter.get_key(latent)
-            except KeyError:
-                logger.warning(
-                    f"Module '{adapter.name}' has not run a forward pass this step. "
-                    "Falling back to zero latent vector."
+                from .telemetry import get_telemetry_logger
+                modules_telemetry = {}
+                for adapter in adapters:
+                    gate_pct = 0.0
+                    if hasattr(adapter, "dendrite_gate") and adapter.dendrite_gate is not None:
+                        gate_pct = adapter.dendrite_gate.get_status().get("active_pct", 0.0)
+                    
+                    scale = 1.0
+                    grad_status = "Stable"
+                    if self.glial_manager is not None:
+                        scale = self.glial_manager._plasticity_scales.get(adapter.name, 1.0)
+                        hook = self.glial_manager._sanitizer_hooks.get(adapter.name)
+                        if hook is not None:
+                            grad_status = hook.grad_status
+
+                    modules_telemetry[adapter.name] = {
+                        "dendritic_active_pct": gate_pct,
+                        "plasticity_scale": scale,
+                        "grad_status": grad_status
+                    }
+
+                crossbar_data = None
+                if self.crossbar is not None and self.crossbar.last_weights is not None:
+                    crossbar_data = {"mean_routing_weight": float(self.crossbar.last_weights.mean().item())}
+
+                ne = getattr(self.neuromodulator, "ne", 0.0) if self.neuromodulator is not None else 0.0
+                ach = getattr(self.neuromodulator, "ach", 0.0) if self.neuromodulator is not None else 0.0
+                thresh = getattr(self.workspace.selector, "ignition_threshold", 0.0) if hasattr(self.workspace, "selector") else 0.0
+
+                get_telemetry_logger().record_step(
+                    step_idx=self._step_counter,
+                    ne=ne,
+                    ach=ach,
+                    ignition_threshold=thresh,
+                    modules_telemetry=modules_telemetry,
+                    crossbar_weights=crossbar_data
                 )
-                batch_size = next(
-                    (b.shape[0] for b in self.data_flow.list_buffers().values()), 1
-                )
-                device = (
-                    next(adapter.module.parameters()).device
-                    if list(adapter.module.parameters())
-                    else torch.device("cpu")
-                )
-                latent = torch.zeros(batch_size, adapter.latent_dim, device=device)
-                latent_states[adapter.name] = latent
-                keys[adapter.name] = adapter.get_key(latent)
+                self._step_counter += 1
+            except Exception as tel_ex:
+                logger.debug(f"Telemetry logging failed: {tel_ex}")
 
-        if self.neuromodulator is not None:
-            self.neuromodulator.modulate(self)
+            return broadcast_state
 
-        if self.glial_manager is not None:
-            self.glial_manager.update(self)
-
-        # Perform Crossbar message passing if attached
-        if self.crossbar is not None:
-            for adapter in adapters:
-                if hasattr(adapter, "slot_idx"):
-                    adapter.engine = self
-            # Vectorized parallel routing
-            routed_latents = self.crossbar() # [B, num_slots, slot_dim]
-            # Distribute routed slot context back to their adapters as waking GWT context
-            for adapter in adapters:
-                if hasattr(adapter, "slot_idx"):
-                    adapter.receive_broadcast(routed_latents[:, adapter.slot_idx])
-
-        broadcast_state = self.workspace(latent_states, keys)
-
-        for adapter in adapters:
-            adapter.receive_broadcast(broadcast_state)
-
-        # Record waking transition to episodic cache if buffer is attached (O(1) overhead)
-        if self.replay_buffer is not None:
-            self.record_transition()
-
-        return broadcast_state
+        except Exception as e:
+            # ── GWT Step Fail-Safe Fallback Bypass ──
+            from .telemetry import get_telemetry_logger
+            get_telemetry_logger().record_error(
+                error_msg=str(e),
+                phase="GWT step execution",
+                details="Graceful fail-safe fallback bypass triggered."
+            )
+            
+            # Construct a safe zero-filled broadcast fallback tensor
+            batch_size = 1
+            try:
+                for buf in self.data_flow.list_buffers().values():
+                    batch_size = buf.shape[0]
+                    break
+            except Exception:
+                pass
+            
+            latent_dim = getattr(self.workspace, "latent_dim", 4) if self.workspace is not None else 4
+            device = torch.device("cpu")
+            if self.workspace is not None and hasattr(self.workspace, "parameters"):
+                try:
+                    params = list(self.workspace.parameters())
+                    if params:
+                        device = params[0].device
+                except Exception:
+                    pass
+            fallback_broadcast = torch.zeros(batch_size, latent_dim, device=device)
+            
+            # Deliver broadcast back to adapters to guarantee forward pathway continuity
+            try:
+                for adapter in self.registry.list_adapters():
+                    adapter.receive_broadcast(fallback_broadcast)
+            except Exception:
+                pass
+                
+            return fallback_broadcast
 
     def attach_replay_buffer(self, replay_buffer: Any) -> None:
         """Attach an episodic replay buffer to record waking transitions."""
