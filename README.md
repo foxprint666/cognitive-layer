@@ -15,27 +15,27 @@ The GWT library acts as a framework-agnostic, low-overhead cognitive layer that 
 
 ```mermaid
 graph TD
-    subgraph Specialized Modules (Open-Weights Subnets)
+    subgraph SM ["Specialized Modules (Open-Weights Subnets)"]
         M1[Vision Transformer / CNN] -->|Hooked Output| A1[Crossbar Slot 0]
         M2[Llama / Language Model] -->|Hooked Output| A2[Crossbar Slot 1]
     end
 
-    subgraph Cross-Modal Routing (Phase v0.7)
+    subgraph CMR ["Cross-Modal Routing (Phase v0.7)"]
         A1 & A2 -->|Vectorized Routing| CC[Cognitive Crossbar]
     end
 
-    subgraph GWT Core Engine & Attention (Phase v0.1)
+    subgraph GCE ["GWT Core Engine & Attention (Phase v0.1)"]
         CC -->|Bottom-Up Salience| GW[Global Workspace]
         GW -->|Top-Down Query Selection| AS[Attention Selector]
     end
 
-    subgraph Metacognitive & Glial Regulation (Phase v0.4 & v0.5)
+    subgraph MGR ["Metacognitive & Glial Regulation (Phase v0.4 & v0.5)"]
         GW -->|Entropy / Surprise| MM[Metacognitive Monitor]
         MM -->|ACh / NE| GW
         MM -->|Local LR Modulation| AM[Astrocyte Manager]
     end
 
-    subgraph Active Dendrites & Concepts (Phase v0.2 & v0.6)
+    subgraph ADC ["Active Dendrites & Concepts (Phase v0.2 & v0.6)"]
         GW -->|Broadcast Context| ADG[Active Dendrite Gate]
         ADG -->|Modulated Features| CL[Concept Layer Bottleneck]
     end
