@@ -1,8 +1,9 @@
 # GWT: Global Workspace Theory Cognitive Augmentation Library
 
-[![PyPI version](https://img.shields.io/badge/pypi-v0.7.0-blue.svg)](https://pypi.org/)
+[![PyPI version](https://img.shields.io/badge/pypi-v0.2.6-blue.svg)](https://pypi.org/project/cognitive-aug/)
 [![License: GPL v3 / Commercial Dual License](https://img.shields.io/badge/License-GPLv3%20%2F%20Commercial-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Build Status](https://img.shields.io/badge/tests-44%20passed-green.svg)](https://github.com/)
+[![Build Status](https://img.shields.io/badge/tests-55%20passed-green.svg)](https://github.com/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1fPsPn24tqG-46bC9cAJqpMOmW9vecuoz?usp=sharing)
 
 An enterprise-grade, lightweight, and mathematically rigorous PyTorch cognitive augmentation library. Based on the cognitive science principles of **Global Workspace Theory (GWT)**, active dendritic processing, metacognitive neuromodulation, and glial homeostasis, GWT enables developers to augment any **open-weights foundation model** (such as Llama-3, Mistral, ResNet, and Vision Transformers) with state-of-the-art brain-inspired routing, active gating, and local learning regulation.
 
@@ -782,6 +783,70 @@ To run GWT's production benchmark loop directly and verify memory safety, local 
 # Run GWT execution loop performance benchmark
 $env:PYTHONPATH="."; py tests/benchmark_cognitive_engine.py
 ```
+
+---
+
+## 5. How to Collaborate & Contributing
+
+We welcome contributions and collaboration from MLOps infrastructure engineers, PyTorch core developers, and neuro-cognitive AI researchers.
+
+### 🚀 Try It in Google Colab
+Get started immediately in your browser without local installation:
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1fPsPn24tqG-46bC9cAJqpMOmW9vecuoz?usp=sharing)
+
+### 🛠️ Development Environment Setup
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/foxprint666/cognitive-layer.git
+   cd cognitive-layer
+   ```
+2. **Initialize a virtual environment**:
+   - Using `uv` (recommended for 10x faster setup):
+     ```bash
+     uv venv
+     # On macOS/Linux: source .venv/bin/activate
+     # On Windows (PowerShell):
+     .venv\Scripts\Activate.ps1
+     
+     # Install GWT package in editable mode with development dependencies
+     $env:UV_LINK_MODE="copy"  # Prevents cloud syncing hardlink conflicts on OneDrive/Windows
+     uv pip install -e ".[dev]"
+     ```
+   - Using standard `pip`:
+     ```bash
+     python -m venv venv
+     # On macOS/Linux: source venv/bin/activate
+     # On Windows (PowerShell):
+     venv\Scripts\Activate.ps1
+     
+     pip install -e ".[dev]"
+     ```
+
+### 🧪 Continuous Verification
+Before submitting a pull request, ensure all tests pass and there are no regression errors:
+```bash
+# Set local PYTHONPATH and run the 55-test suite
+$env:PYTHONPATH="."  # On Linux/macOS: export PYTHONPATH="."
+python -m pytest tests/
+```
+
+To run end-to-end multi-modal cognitive benchmarks:
+```bash
+python tests/benchmark_cognitive_engine.py
+```
+
+### 📋 Code Style & Formatting Guidelines
+- **Autograd Graph Safety**: Enforce strict `.detach().clone()` boundaries on any intermediate tensors stored or cached historically (like memory traces) to prevent OOM graph memory leaks.
+- **Type Hinting**: Maintain strict PEP 484 type hints across all dynamic parameters and constructor parameters.
+- **Formatting**: Format your edits using `black` and lint with `ruff` or `flake8` to comply with coding standards.
+
+### 📬 Submission Workflow
+1. Fork the repository and create a new feature branch (`git checkout -b feature/amazing-feature`).
+2. Implement your architectural enhancements or bug fixes.
+3. Add corresponding unit tests in the `tests/` directory.
+4. Verify all tests pass successfully.
+5. Commit your changes (`git commit -m 'Add amazing GWT phase'`) and push to your fork.
+6. Submit a Pull Request targeting the `main` branch.
 
 ---
 
