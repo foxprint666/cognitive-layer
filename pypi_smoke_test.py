@@ -1,6 +1,6 @@
 """
-Smoke test: verifies cognitive-aug 0.2.2 installs and imports correctly from PyPI.
-Run this inside a fresh venv AFTER: pip install cognitive-aug==0.2.2
+Smoke test: verifies cognitive-aug 0.2.5 installs and imports correctly from PyPI.
+Run this inside a fresh venv AFTER: pip install cognitive-aug==0.2.5
 """
 import sys
 
@@ -32,7 +32,7 @@ print("  ✓ All symbols imported successfully")
 print("\n[2/4] Checking installed version ...")
 import importlib.metadata
 version = importlib.metadata.version("cognitive-aug")
-assert version == "0.2.2", f"Expected 0.2.2, got {version}"
+assert version == "0.2.5", f"Expected 0.2.5, got {version}"
 print(f"  ✓ Version: {version}")
 
 # ── 3. Addon module forward pass ──────────────────────────────────────────────
@@ -107,5 +107,5 @@ assert broadcast.shape[0] == B
 print(f"  ✓ Engine broadcast shape: {broadcast.shape}")
 
 print("\n========================================")
-print("  ALL TESTS PASSED — cognitive-aug 0.2.2")
+print("  ALL TESTS PASSED — cognitive-aug 0.2.5")
 print("========================================")

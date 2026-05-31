@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cognitive-aug"
-version = "0.2.3"
+version = "0.2.5"
 description = "Modular brain-inspired cognitive augmentation layers for neural networks"
 readme = "README.md"
 requires-python = ">=3.10"

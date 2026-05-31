@@ -136,6 +136,9 @@ class ConceptLayer(nn.Module):
         # 2. Causal intervention clamping under a torch.no_grad() block
         interventions = self.intervention_engine.get_interventions()
         if interventions:
+            # Clamped target tensor matching activations shape
+            clamped_activations = activations.detach().clone()
+            
             with torch.no_grad():
                 # Build index mask and target values
                 override_mask = torch.zeros(
@@ -148,8 +151,6 @@ class ConceptLayer(nn.Module):
                     override_mask[idx] = True
                     override_vals[idx] = val
 
-                # Clamped target tensor matching activations shape
-                clamped_activations = activations.clone()
                 clamped_activations[..., override_mask] = override_vals[override_mask]
 
             # Differentiable selection: zeroes out gradients for overridden concepts,

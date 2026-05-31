@@ -269,9 +269,9 @@ class NeurogenesisReplayBuffer:
 
     def push(self, state: torch.Tensor, context: torch.Tensor, target: torch.Tensor, surprise: float, neuro_event: bool):
         experience = {
-            "state": state.detach().cpu(),
-            "context": context.detach().cpu(),
-            "target": target.detach().cpu(),
+            "state": state.detach().clone().cpu(),
+            "context": context.detach().clone().cpu(),
+            "target": target.detach().clone().cpu(),
             "surprise": surprise,
             "neuro_event": float(neuro_event)
         }
