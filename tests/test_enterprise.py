@@ -214,8 +214,11 @@ def test_async_task_consolidation() -> None:
     assert task_info["status"] in ["Queued", "Offloaded"]
     assert task_info["backend"] == "Local Thread"
 
-    # Wait briefly for local worker thread to process background queue
-    time.sleep(1.0)
+    # Wait for local worker thread to process background queue
+    for _ in range(30):
+        if len(engine.replay_buffer) == 0:
+            break
+        time.sleep(0.1)
     
     # Replay buffer should be flushed after sleep consolidation completes!
     assert len(engine.replay_buffer) == 0

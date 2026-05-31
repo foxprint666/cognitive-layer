@@ -121,6 +121,19 @@ from .telemetry import (
     get_telemetry_logger,
 )
 
+# ── Autonomous Computational Neurogenesis ──────────────────────────────────────
+from .neurogenesis import (
+    ExtendedDendriticModuleAdapter,
+    NeurogenesisManager,
+    ConsolidationEngine as NeurogenesisConsolidationEngine,
+    NeurogenesisReplayBuffer,
+    OpenWeightsAdapterHook,
+    dynamic_register_parameters,
+    dynamic_deregister_parameters,
+    NeurogenesisGradientSanitizerHook,
+    NeurogenesisAstrocyteManager,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -179,6 +192,16 @@ __all__ = [
     # Observability Telemetry
     "GWTTelemetryLogger",
     "get_telemetry_logger",
+    # Neurogenesis
+    "ExtendedDendriticModuleAdapter",
+    "NeurogenesisManager",
+    "NeurogenesisConsolidationEngine",
+    "NeurogenesisReplayBuffer",
+    "OpenWeightsAdapterHook",
+    "dynamic_register_parameters",
+    "dynamic_deregister_parameters",
+    "NeurogenesisGradientSanitizerHook",
+    "NeurogenesisAstrocyteManager",
 ]
 
 
