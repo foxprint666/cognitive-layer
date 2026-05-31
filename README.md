@@ -39,6 +39,13 @@ graph TD
         GW -->|Broadcast Context| ADG[Active Dendrite Gate]
         ADG -->|Modulated Features| CL[Concept Layer Bottleneck]
     end
+
+    subgraph ACN ["Autonomous Computational Neurogenesis (Phase v0.9)"]
+        MM -->|NE Surprise Trigger| NM[Neurogenesis Manager]
+        NM -->|Add Dendritic Branch| EDMA[Extended Dendritic Module Adapter]
+        NAM[Neurogenesis Astrocyte Manager] -->|Growth Excitotoxicity Safety| NM
+        EDMA -->|Active NMDA Gating| GW
+    end
 ```
 
 ### Key Biological Paradigms
@@ -49,6 +56,8 @@ graph TD
 5. **Glial Metaplasticity & Excitotoxicity Protection (Phase v0.5)**: Employs virtual astrocytes to scale local learning rates and damps excessive gradient variance locally.
 6. **Conceptual Bottlenecks & Causal Interventions (Phase v0.6)**: Maps representations onto explicit concept activation scores in $[0, 1]$, enabling human-in-the-loop causal overrides.
 7. **Cross-Modal Cognitive Crossbar (Phase v0.7)**: Routes information concurrently across multiple parallel slots using multi-slot attention routing.
+8. **Enterprise Scalability & Caching (Phase v0.8)**: Offloads heavy SWS consolidation loops asynchronously and serializes/deserializes PyTorch activation tensors to/from Redis Enterprise.
+9. **Autonomous Computational Neurogenesis (Phase v0.9)**: Dynamically spawns new parallel dendritic branches in response to high unexpected uncertainty, protected by somatic calcium regulators and offline pruning consolidation.
 
 ---
 
@@ -573,6 +582,132 @@ class CrossbarModuleAdapter(ModuleAdapter):
         slot_idx: int,
         **kwargs: Any,
     ) -> None: ...
+```
+
+---
+
+### Phase v0.8: Enterprise Distributed Scalability & Cache
+
+Implements asynchronous offline consolidation and serializes active activation tensors to/from a distributed Redis State Store.
+
+#### Class: `RedisStateStore`
+Serializes/deserializes PyTorch tensors as binary blobs with autograd graph isolation using Redis.
+
+```python
+class RedisStateStore(BaseStateStore):
+    def __init__(self, redis_url: str = "redis://localhost:6379/0", key_prefix: str = "gwt:state", **kwargs: Any) -> None: ...
+```
+
+#### Function: `offloaded_enter_sleep_phase`
+Triggers Slow-Wave Sleep (SWS) offline memory consolidation asynchronously in background daemon queues or Celery/Redis Enterprise, avoiding GPU thread blocking.
+
+```python
+def offloaded_enter_sleep_phase(engine: Any, steps: int = 5, learning_rate: float = 0.001, pruning_threshold: float = 0.05, batch_size: int = 32, use_celery: bool = False) -> Dict[str, Any]: ...
+```
+
+---
+
+### Phase v0.9: Autonomous Computational Neurogenesis
+
+Enables runtime adaptive neural architecture growth (spawning new parallel dendritic pathways) and consolidation, protected by calcium regulators and maturate gradient sanitizers.
+
+#### Class: `ExtendedDendriticModuleAdapter`
+Extends dendritic processing to support dynamic, structural additions of branches at runtime.
+
+```python
+class ExtendedDendriticModuleAdapter(torch.nn.Module):
+    def __init__(self, feedforward_dim: int, context_dim: int, initial_branches: int = 1) -> None: ...
+    def add_dendritic_branch(self) -> int: ...
+    """Spawns a new zero-initialized linear branch and gate."""
+    def prune_branch(self, idx: int) -> None: ...
+    """Zeroes out parameters and masks the branch."""
+```
+
+#### Class: `NeurogenesisManager`
+Primary orchestrator evaluating unexpected uncertainty (`NE_surprise`) to trigger growth on target adapters under temporal cooldown refractories and ACh focus ceilings.
+
+```python
+class NeurogenesisManager:
+    def __init__(self, config: Dict[str, Any], astrocyte_manager: nn.Module, replay_buffer: Any, metacognitive_monitor: Any) -> None: ...
+    def step(self, step_idx: int, metrics: Dict[str, Any], adapters: List[nn.Module]) -> str: ...
+    """Evaluates criteria and coordinates dynamic structural growth. Returns status string."""
+```
+
+#### Class: `NeurogenesisConsolidationEngine`
+Manages offline sleep cycles, accumulating branch performance metrics to permanentize or prune candidates.
+
+```python
+class NeurogenesisConsolidationEngine:
+    def __init__(self, model: nn.Module, replay_buffer: Any, threshold_perm: float = 0.4) -> None: ...
+    def execute_sleep_cycle(self, optimizer: torch.optim.Optimizer, steps: int = 100) -> None: ...
+```
+
+#### Reproducible End-to-End Demonstration Guide
+
+Below is a complete, self-contained, and reproducible demonstration script that simulates surprise-triggered neurogenesis, dynamic optimizer updates, glia-inspired safety checks, and offline SWS consolidation:
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from gwt import (
+    ExtendedDendriticModuleAdapter,
+    NeurogenesisManager,
+    NeurogenesisConsolidationEngine,
+    NeurogenesisReplayBuffer,
+    dynamic_register_parameters,
+    NeurogenesisAstrocyteManager
+)
+
+# 1. Initialize dynamic module adapter and homeostatic astrocyte regulator
+in_dim, context_dim = 8, 4
+adapter = ExtendedDendriticModuleAdapter(feedforward_dim=in_dim, context_dim=context_dim, initial_branches=1)
+astrocyte = NeurogenesisAstrocyteManager(calcium_decay=0.1, safety_ceiling=3.0)
+replay_buffer = NeurogenesisReplayBuffer(capacity=10)
+
+# 2. Setup dynamic live optimizer
+optimizer = optim.Adam(adapter.parameters(), lr=0.01)
+
+# 3. Setup Neurogenesis lifecycle manager
+config = {"ne_threshold": 0.80, "ach_focus_ceiling": 0.70, "cooldown_steps": 1}
+manager = NeurogenesisManager(
+    config=config,
+    astrocyte_manager=astrocyte,
+    replay_buffer=replay_buffer,
+    metacognitive_monitor=None
+)
+
+# 4. Simulate a training pass under unexpected high uncertainty (NE surprise spike)
+x = torch.randn(2, in_dim)
+context = torch.randn(2, context_dim)
+metrics = {"NE_surprise": torch.tensor(0.95), "ACh_focus": torch.tensor(0.1)}
+
+print(f"Pre-neurogenesis branches count: {len(adapter.branches)}")
+
+# 5. Evaluate and trigger neurogenesis
+status = manager.step(step_idx=1, metrics=metrics, adapters=[adapter])
+print(f"Neurogenesis status: {status}")
+
+if status == "neurogenesis_triggered":
+    new_idx = len(adapter.branches) - 1
+    print(f"Successfully spawned new branch at index: {new_idx}")
+    
+    # Register the newly spawned branch parameters in the active optimizer
+    dynamic_register_parameters(optimizer, adapter, new_idx)
+    print("Registered new parameters inside the live running Optimizer.")
+
+# 6. Execute forward pass with active calcium monitoring
+raw_outputs = adapter(x, context)
+regulated_outputs = astrocyte.monitor_and_regulate(raw_outputs)
+print(f"Calcium Level: {astrocyte.calcium_store.item():.4f}")
+
+# 7. Simulate offline Slow-Wave Sleep (SWS) crystallization consolidation
+target = torch.randn(2, in_dim)
+replay_buffer.push(x, context, target, surprise=1.0, neuro_event=True)
+
+sleep_engine = NeurogenesisConsolidationEngine(adapter, replay_buffer, threshold_perm=0.3)
+sleep_engine.execute_sleep_cycle(optimizer, steps=2)
+print("Completed offline sleep-cycle consolidation evaluation.")
 ```
 
 ---
