@@ -148,8 +148,22 @@ class ConceptLayer(nn.Module):
                     self.num_concepts, device=activations.device, dtype=activations.dtype
                 )
                 for idx, val in interventions.items():
-                    override_mask[idx] = True
-                    override_vals[idx] = val
+                    actual_idx = idx
+                    if isinstance(idx, str):
+                        if idx in self.concept_names:
+                            actual_idx = self.concept_names.index(idx)
+                        else:
+                            logger.warning(f"Concept override key '{idx}' not found in concept names.")
+                            continue
+
+                    if isinstance(actual_idx, (int, torch.Tensor)):
+                        # Convert to standard Python int if it is a single-element tensor
+                        if isinstance(actual_idx, torch.Tensor):
+                            actual_idx = int(actual_idx.item())
+                        
+                        if 0 <= actual_idx < self.num_concepts:
+                            override_mask[actual_idx] = True
+                            override_vals[actual_idx] = val
 
                 clamped_activations[..., override_mask] = override_vals[override_mask]
 

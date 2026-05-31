@@ -129,3 +129,33 @@ def test_inspect_conceptual_dashboard():
     # Inspect again to verify OVERRIDDEN output tag
     report_overridden = engine.inspect()
     assert "(OVERRIDDEN -> 1.0)" in report_overridden
+
+
+def test_concept_intervention_string_name_override():
+    """Verify that causal interventions can be registered and resolved by string concept names."""
+    input_dim = 6
+    num_concepts = 3
+    batch_size = 2
+    concept_names = ["Anomalous", "Exploratory", "Focused"]
+    
+    layer = ConceptLayer(
+        input_dim=input_dim,
+        num_concepts=num_concepts,
+        abstraction_type="projection",
+        concept_names=concept_names,
+    )
+    
+    # Register overrides: one by string name, one by integer index
+    layer.intervention_engine.set_intervention("Anomalous", 1.0)
+    layer.intervention_engine.set_intervention(2, 0.0)
+    
+    inputs = torch.randn(batch_size, input_dim)
+    outputs = layer(inputs)
+    
+    # Assert column 0 ("Anomalous") is exactly clamped to 1.0
+    assert torch.allclose(outputs[:, 0], torch.tensor(1.0))
+    # Assert column 2 ("Focused" / index 2) is exactly clamped to 0.0
+    assert torch.allclose(outputs[:, 2], torch.tensor(0.0))
+    # Assert column 1 ("Exploratory") remains free and variable
+    assert not torch.allclose(outputs[:, 1], torch.tensor(1.0))
+    assert not torch.allclose(outputs[:, 1], torch.tensor(0.0))
