@@ -113,6 +113,7 @@ from .async_tasks import (
 from .profiler import (
     profile_submodules,
     register_selective_hooks,
+    discover_transformer_layers,
 )
 
 # ── OpenTelemetry Observability Telemetry ──────────────────────────────────────
@@ -189,6 +190,7 @@ __all__ = [
     # Selective Hooking & Profiling
     "profile_submodules",
     "register_selective_hooks",
+    "discover_transformer_layers",
     # Observability Telemetry
     "GWTTelemetryLogger",
     "get_telemetry_logger",

@@ -129,6 +129,8 @@ class ModuleAdapter(nn.Module):
         data_flow: DataFlowManager,
         key_dim: int = 64,
         projection_in_dim: Optional[int] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         """
         Args:
@@ -140,6 +142,8 @@ class ModuleAdapter(nn.Module):
             projection_in_dim: If the module's raw output dimension does not match
                                latent_dim, specify it here to auto-build a learnable
                                projection layer.
+            device           : The PyTorch device to initialize on.
+            dtype            : The PyTorch dtype to initialize with.
         """
         super().__init__()
         self.name = name
@@ -148,20 +152,25 @@ class ModuleAdapter(nn.Module):
         self.data_flow = data_flow
         self.key_dim = key_dim
 
+        factory_kwargs = {'device': device, 'dtype': dtype}
+
         # Optional learnable projection: raw_output_dim -> latent_dim
         self.projection: Optional[nn.Linear] = None
         if projection_in_dim is not None and projection_in_dim != latent_dim:
-            self.projection = nn.Linear(projection_in_dim, latent_dim)
+            self.projection = nn.Linear(projection_in_dim, latent_dim, **factory_kwargs)
             logger.info(
                 f"Created auto-projection layer for module '{name}': "
                 f"{projection_in_dim} -> {latent_dim}"
             )
 
         # Key projection: maps latent state -> attention key space
-        self.key_proj = nn.Linear(latent_dim, key_dim)
+        self.key_proj = nn.Linear(latent_dim, key_dim, **factory_kwargs)
 
         # Buffer storing the latest broadcasted workspace state for this module
-        self.register_buffer("last_broadcast", torch.zeros(1, latent_dim))
+        self.register_buffer("last_broadcast", torch.zeros(1, latent_dim, **factory_kwargs))
+
+        if device is not None or dtype is not None:
+            self.to(device=device, dtype=dtype)
 
         self._hook_handle: Optional[torch.utils.hooks.RemovableHandle] = None
         self._register_forward_hook()

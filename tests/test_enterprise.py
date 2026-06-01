@@ -260,3 +260,54 @@ def test_json_observability_telemetry() -> None:
     assert parsed["neuromodulators"]["norepinephrine_surprise"] == 0.25
     assert parsed["neuromodulators"]["acetylcholine_focus"] == 0.82
     assert parsed["modules"]["vision_subsystem"]["dendritic_active_pct"] == 75.0
+
+
+def test_precision_discovery_telemetry_scaling() -> None:
+    """Verify precision-awareness, backbone discovery engine, and scientific notation scaling."""
+    # 1. Test Backbone Discovery
+    class DummyTransformer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList([nn.Sequential(nn.Linear(8, 8))])
+    
+    class MockLLM(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = DummyTransformer()
+
+    model = MockLLM()
+    from gwt.profiler import discover_transformer_layers
+    layers = discover_transformer_layers(model)
+    assert isinstance(layers, nn.ModuleList)
+    assert len(layers) == 1
+
+    # 2. Test Precision and Device Constructors
+    from gwt import DendriticModuleAdapter, CognitiveAugEngine
+    engine = CognitiveAugEngine()
+    
+    # We create a half-precision (float16) target layer to mimic host weights
+    target_layer = nn.Linear(8, 8).to(dtype=torch.float16)
+    
+    adapter = DendriticModuleAdapter(
+        name="dendrite_half",
+        module=target_layer,
+        latent_dim=8,
+        data_flow=engine.data_flow,
+        device=torch.device("cpu"),
+        dtype=torch.float16,
+    )
+    
+    # Check that keys and projections inside adapters are cast to float16
+    assert adapter.key_proj.weight.dtype == torch.float16
+    assert adapter.dendrite_gate.context_proj.weight.dtype == torch.float16
+
+    # 3. Test Telemetry Scaling below 0.001
+    from gwt import MetacognitiveMonitor
+    monitor = MetacognitiveMonitor()
+    monitor.ach = 1.95e-4
+    monitor.ne = 0.0005
+    
+    chems = monitor.get_chemical_levels()
+    # Check that they format to scientific format (contain "e-")
+    assert "1.95e-04" in chems["dashboard"]
+    assert "5.00e-04" in chems["dashboard"]

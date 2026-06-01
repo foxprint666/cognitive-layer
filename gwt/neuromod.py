@@ -225,7 +225,10 @@ class MetacognitiveMonitor:
         """
         ach_bar = make_ascii_bar(self.ach)
         ne_bar = make_ascii_bar(self.ne)
-        dashboard = f"[ ACh: {ach_bar} {self.ach:.2f} | NE: {ne_bar} {self.ne:.2f} ]"
+        
+        ach_str = f"{self.ach:.2e}" if (0.0 < self.ach < 0.001) else f"{self.ach:.2f}"
+        ne_str = f"{self.ne:.2e}" if (0.0 < self.ne < 0.001) else f"{self.ne:.2f}"
+        dashboard = f"[ ACh: {ach_bar} {ach_str} | NE: {ne_bar} {ne_str} ]"
 
         return {
             "ne": self.ne,

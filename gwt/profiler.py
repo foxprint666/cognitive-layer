@@ -10,7 +10,7 @@ minimize Time-To-First-Token (TTFT) latency overhead in production systems.
 
 import logging
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -19,7 +19,55 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Layer Profiling Infrastructure
+# 1. Automated Backbone Discovery Engine & Layer Scanner
+# ─────────────────────────────────────────────────────────────────────────────
+
+def discover_transformer_layers(model: nn.Module) -> Any:
+    """
+    Dynamically discover structural sequence paths within open-weights transformer blocks.
+    """
+    common_paths = ['model.layers', 'transformer.h', 'transformer.layers', 'model.decoder.layers']
+    for path in common_paths:
+        try:
+            parts = path.split('.')
+            target = model
+            for part in parts:
+                target = getattr(target, part)
+            if isinstance(target, (torch.nn.ModuleList, torch.nn.Sequential, list)):
+                return target
+        except AttributeError:
+            continue
+    
+    # Deep iterative discovery fallback if paths are custom-mapped
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.ModuleList) and len(module) > 0:
+            # Ensure we don't accidentally capture high-level outer wrappers
+            if any(isinstance(child, torch.nn.Linear) for child in module[0].modules()):
+                return module
+                
+    raise AttributeError("cognitive-aug could not automatically resolve the model structure block sequence layers.")
+
+
+def cast_input_to_device_and_dtype(x: Any, device: torch.device, dtype: torch.dtype) -> Any:
+    """
+    Recursively casts input tensors to the target device and formats.
+    """
+    if isinstance(x, torch.Tensor):
+        if torch.is_floating_point(x):
+            return x.to(device=device, dtype=dtype)
+        else:
+            return x.to(device=device)
+    elif isinstance(x, dict):
+        return {k: cast_input_to_device_and_dtype(v, device, dtype) for k, v in x.items()}
+    elif isinstance(x, list):
+        return [cast_input_to_device_and_dtype(v, device, dtype) for v in x]
+    elif isinstance(x, tuple):
+        return tuple(cast_input_to_device_and_dtype(v, device, dtype) for v in x)
+    return x
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. Layer Profiling Infrastructure
 # ─────────────────────────────────────────────────────────────────────────────
 
 def profile_submodules(
@@ -40,6 +88,26 @@ def profile_submodules(
     logger.info("GWT Micro-Profiler: Initiating layer profiling dry-run...")
     stats: List[Dict[str, Any]] = []
     handles = []
+
+    # Infer host model precision and device
+    try:
+        model_dtype = next(model.parameters()).dtype
+        model_device = next(model.parameters()).device
+    except StopIteration:
+        model_dtype = torch.float32
+        model_device = torch.device("cpu")
+
+    # Ensure dummy_input matches device and format
+    dummy_input = cast_input_to_device_and_dtype(dummy_input, model_device, model_dtype)
+
+    # Attempt architecture-agnostic layer discovery to narrow search space
+    try:
+        target_blocks = discover_transformer_layers(model)
+        block_submodules = set(target_blocks.modules())
+        logger.info("GWT Micro-Profiler: Dynamic layer scanner discovered sequence backbone structure inside model.")
+    except AttributeError:
+        block_submodules = None
+        logger.info("GWT Micro-Profiler: Dynamic layer scanner fell back to standard named modules profiling.")
 
     # Temporary forward hook to profile activations
     def make_profile_hook(name: str, module: nn.Module):
@@ -67,28 +135,41 @@ def profile_submodules(
             return outputs
         return hook_fn
 
-    # Register profiling hooks recursively on all leaf nodes
+    # Register profiling hooks recursively on all leaf nodes (narrowed to transformer blocks if found)
     for name, module in model.named_modules():
+        if block_submodules is not None and module not in block_submodules:
+            continue
         # Hook nn.Linear, nn.Conv2d, and custom Attention layers only
         if len(list(module.children())) == 0 and isinstance(module, (nn.Linear, nn.Conv2d)):
             handle = module.register_forward_hook(make_profile_hook(name, module))
             handles.append(handle)
 
-    # Execute dummy forward pass (under no_grad to keep it lightweight)
-    with torch.no_grad():
-        try:
-            if isinstance(dummy_input, tuple):
-                model(*dummy_input)
-            elif isinstance(dummy_input, dict):
-                model(**dummy_input)
+    # Execute dummy forward pass (under no_grad and autocast context to prevent OOM/dtype crashes)
+    try:
+        with torch.no_grad():
+            is_half = model_dtype in (torch.float16, torch.bfloat16)
+            is_cuda = model_device.type == "cuda"
+            if is_half or is_cuda:
+                with torch.autocast(device_type=model_device.type, dtype=model_dtype):
+                    if isinstance(dummy_input, tuple):
+                        model(*dummy_input)
+                    elif isinstance(dummy_input, dict):
+                        model(**dummy_input)
+                    else:
+                        model(dummy_input)
             else:
-                model(dummy_input)
-        except Exception as e:
-            logger.error(f"GWT Micro-Profiler: Error during dummy profiling forward pass: {e}")
-        finally:
-            # Remove all profiling hooks immediately
-            for h in handles:
-                h.remove()
+                if isinstance(dummy_input, tuple):
+                    model(*dummy_input)
+                elif isinstance(dummy_input, dict):
+                    model(**dummy_input)
+                else:
+                    model(dummy_input)
+    except Exception as e:
+        logger.error(f"GWT Micro-Profiler: Error during dummy profiling forward pass: {e}")
+    finally:
+        # Remove all profiling hooks immediately
+        for h in handles:
+            h.remove()
 
     # Sort layers by computed salience_score (highest variance/magnitude first)
     sorted_stats = sorted(stats, key=lambda s: s["salience_score"], reverse=True)
@@ -111,7 +192,7 @@ def profile_submodules(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. Selective Hook Registration
+# 3. Selective Hook Registration
 # ─────────────────────────────────────────────────────────────────────────────
 
 def register_selective_hooks(
@@ -155,13 +236,20 @@ def register_selective_hooks(
         f"layers ({selective_ratio*100:.1f}% selective ratio) to optimize TTFT."
     )
 
+    try:
+        model_dtype = next(model.parameters()).dtype
+        model_device = next(model.parameters()).device
+    except StopIteration:
+        model_dtype = torch.float32
+        model_device = torch.device("cpu")
+
     registered_adapters = []
     
     # 3. Register GWT adapters on selected top-salience submodules
     for name, module, metrics in target_layers:
         clean_name = name.replace(".", "_")
         
-        # Dynamically select adapter type
+        # Dynamically select adapter type and construct with matching device/dtype
         if use_dendritic:
             from gwt import DendriticModuleAdapter
             adapter = DendriticModuleAdapter(
@@ -169,6 +257,8 @@ def register_selective_hooks(
                 module=module,
                 latent_dim=latent_dim,
                 data_flow=engine.data_flow,
+                device=model_device,
+                dtype=model_dtype,
                 **kwargs
             )
         else:
@@ -178,9 +268,12 @@ def register_selective_hooks(
                 module=module,
                 latent_dim=latent_dim,
                 data_flow=engine.data_flow,
+                device=model_device,
+                dtype=model_dtype,
                 **kwargs
             )
             
+        adapter.to(device=model_device, dtype=model_dtype)
         engine.registry.register(clean_name, adapter)
         registered_adapters.append(adapter)
         logger.info(f"  [+] GWT hook registered selectively on high-salience layer: '{name}'")

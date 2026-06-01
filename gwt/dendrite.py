@@ -39,6 +39,8 @@ class ActiveDendriteGate(nn.Module):
         num_branches: int = 4,
         spike_type: str = "modulatory-gain",
         threshold: float = 0.5,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         """
         Args:
@@ -47,6 +49,8 @@ class ActiveDendriteGate(nn.Module):
             num_branches    : Number of sub-integration dendritic zones.
             spike_type      : Gating type: 'modulatory-gain' or 'nmda-threshold'.
             threshold       : Spike threshold for 'nmda-threshold' gating.
+            device          : PyTorch device context.
+            dtype           : PyTorch dtype context.
         """
         super().__init__()
         self.feedforward_dim = feedforward_dim
@@ -62,8 +66,10 @@ class ActiveDendriteGate(nn.Module):
                 "Must be one of ['modulatory-gain', 'nmda-threshold']."
             )
 
+        factory_kwargs = {'device': device, 'dtype': dtype}
+
         # Vectorized stacked linear projection mapping context -> branches * features
-        self.context_proj = nn.Linear(context_dim, num_branches * feedforward_dim)
+        self.context_proj = nn.Linear(context_dim, num_branches * feedforward_dim, **factory_kwargs)
         
         # Structural pruning masks to permanently sever pruned connections
         self.register_buffer("pruning_mask", torch.ones_like(self.context_proj.weight.data))
@@ -76,6 +82,9 @@ class ActiveDendriteGate(nn.Module):
         # Detached branch activation scores for telemetry / diagnostic dashboards
         # Shape: [B, num_branches, feedforward_dim]
         self.latest_branch_activations: Optional[torch.Tensor] = None
+
+        if device is not None or dtype is not None:
+            self.to(device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         """
@@ -190,6 +199,8 @@ class DendriticModuleAdapter(ModuleAdapter):
         projection_in_dim: Optional[int] = None,
         threshold: float = 0.5,
         name: Optional[str] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -227,6 +238,9 @@ class DendriticModuleAdapter(ModuleAdapter):
         if data_flow is None:
             data_flow = DataFlowManager()
 
+        self._device = device
+        self._dtype = dtype
+
         # Initialize parent ModuleAdapter
         super().__init__(
             name=resolved_name,
@@ -235,6 +249,8 @@ class DendriticModuleAdapter(ModuleAdapter):
             data_flow=data_flow,
             key_dim=key_dim,
             projection_in_dim=projection_in_dim,
+            device=device,
+            dtype=dtype,
             **kwargs,
         )
 
@@ -246,7 +262,7 @@ class DendriticModuleAdapter(ModuleAdapter):
         self.dendrite_gate: Optional[ActiveDendriteGate] = None
 
         if detected_dim is not None:
-            self._init_dendrite_gate(detected_dim)
+            self._init_dendrite_gate(detected_dim, device=device, dtype=dtype)
         else:
             logger.warning(
                 f"Could not statically inspect output dimension for module '{resolved_name}'. "
@@ -254,6 +270,9 @@ class DendriticModuleAdapter(ModuleAdapter):
                 "WARNING: If you are training this module, ensure you create the optimizer AFTER "
                 "the first forward pass, or explicitly provide 'feedforward_dim' during initialization."
             )
+
+        if device is not None or dtype is not None:
+            self.to(device=device, dtype=dtype)
 
     def _detect_output_dim(self, module: nn.Module) -> Optional[int]:
         """Tries to statically inspect the output dimension of the module layers."""
@@ -282,23 +301,36 @@ class DendriticModuleAdapter(ModuleAdapter):
 
         return None
 
-    def _init_dendrite_gate(self, feedforward_dim: int) -> None:
+    def _init_dendrite_gate(self, feedforward_dim: int, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None) -> None:
         """Helper to construct and register the active dendrite gate."""
+        # Resolve device/dtype: passed arguments -> stored attributes -> module params fallback -> defaults
+        target_device = device
+        if target_device is None:
+            target_device = getattr(self, "_device", None)
+        if target_device is None:
+            target_device = next(self.module.parameters()).device if list(self.module.parameters()) else torch.device("cpu")
+
+        target_dtype = dtype
+        if target_dtype is None:
+            target_dtype = getattr(self, "_dtype", None)
+        if target_dtype is None:
+            target_dtype = next(self.module.parameters()).dtype if list(self.module.parameters()) else torch.float32
+
         self.dendrite_gate = ActiveDendriteGate(
             feedforward_dim=feedforward_dim,
             context_dim=self.latent_dim,  # Context is the GWT broadcast vector
             num_branches=self.num_branches,
             spike_type=self.spike_type,
             threshold=self.threshold,
+            device=target_device,
+            dtype=target_dtype,
         )
         
         # Register as a submodule so parameters appear in adapter.parameters()
         self.add_module("dendrite_gate", self.dendrite_gate)
 
         # Cast to correct device & dtype to match core module
-        device = next(self.module.parameters()).device if list(self.module.parameters()) else torch.device("cpu")
-        dtype = next(self.module.parameters()).dtype if list(self.module.parameters()) else torch.float32
-        self.dendrite_gate.to(device=device, dtype=dtype)
+        self.dendrite_gate.to(device=target_device, dtype=target_dtype)
         logger.debug(f"ActiveDendriteGate successfully initialized for module '{self.name}'.")
 
     def _register_forward_hook(self) -> None:
@@ -323,7 +355,7 @@ class DendriticModuleAdapter(ModuleAdapter):
             if self.dendrite_gate is None:
                 feedforward_dim = latent.shape[-1]
                 logger.info(f"Dynamically initializing ActiveDendriteGate for '{self.name}' with feedforward_dim={feedforward_dim}")
-                self._init_dendrite_gate(feedforward_dim)
+                self._init_dendrite_gate(feedforward_dim, device=latent.device, dtype=latent.dtype)
 
             # 3. Retrieve global GWT context broadcast vector
             context = self.get_last_broadcast()

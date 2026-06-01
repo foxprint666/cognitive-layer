@@ -151,6 +151,8 @@ class CrossbarModuleAdapter(ModuleAdapter):
         latent_dim: int,
         data_flow: Any,
         slot_idx: int,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -160,10 +162,23 @@ class CrossbarModuleAdapter(ModuleAdapter):
             latent_dim : Representation dimension.
             data_flow  : Active DataFlowManager instance.
             slot_idx   : Dedicated crossbar slot index.
+            device     : The PyTorch device context.
+            dtype      : The PyTorch dtype context.
         """
-        super().__init__(name, module, latent_dim, data_flow, **kwargs)
+        super().__init__(
+            name=name,
+            module=module,
+            latent_dim=latent_dim,
+            data_flow=data_flow,
+            device=device,
+            dtype=dtype,
+            **kwargs,
+        )
         self.slot_idx = slot_idx
         self.engine: Optional[Any] = None
+
+        if device is not None or dtype is not None:
+            self.to(device=device, dtype=dtype)
 
     def _register_forward_hook(self) -> None:
         """Registers a hook that intercepts latent representations and writes to the crossbar."""
