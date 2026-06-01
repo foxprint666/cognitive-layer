@@ -1,5 +1,5 @@
 """
-gwt/state.py
+cognitive_aug/state.py
 ============
 Distributed State Management Layer (Phase v0.8 Enterprise Expansion).
 
@@ -172,7 +172,7 @@ class RedisStateStore(BaseStateStore):
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379/0",
-        key_prefix: str = "gwt:state",
+        key_prefix: str = "cognitive_aug:state",
         **kwargs: Any,
     ) -> None:
         self.key_prefix = key_prefix
@@ -305,7 +305,7 @@ class RedisReplayBufferStore(BaseReplayBufferStore):
         self,
         max_size: int = 1000,
         redis_url: str = "redis://localhost:6379/0",
-        key: str = "gwt:replay_buffer",
+        key: str = "cognitive_aug:replay_buffer",
         **kwargs: Any,
     ) -> None:
         self.max_size = max_size

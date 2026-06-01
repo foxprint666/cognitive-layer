@@ -20,7 +20,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
     ModuleAdapter,
@@ -36,7 +36,7 @@ from gwt import (
     GWTTelemetryLogger,
     get_telemetry_logger,
 )
-from gwt.state import _serialize_tensor, _deserialize_tensor
+from cognitive_aug.state import _serialize_tensor, _deserialize_tensor
 
 
 # ── Mock Infrastructure ───────────────────────────────────────────────────────
@@ -276,13 +276,13 @@ def test_precision_discovery_telemetry_scaling() -> None:
             self.model = DummyTransformer()
 
     model = MockLLM()
-    from gwt.profiler import discover_transformer_layers
+    from cognitive_aug.profiler import discover_transformer_layers
     layers = discover_transformer_layers(model)
     assert isinstance(layers, nn.ModuleList)
     assert len(layers) == 1
 
     # 2. Test Precision and Device Constructors
-    from gwt import DendriticModuleAdapter, CognitiveAugEngine
+    from cognitive_aug import DendriticModuleAdapter, CognitiveAugEngine
     engine = CognitiveAugEngine()
     
     # We create a half-precision (float16) target layer to mimic host weights
@@ -302,7 +302,7 @@ def test_precision_discovery_telemetry_scaling() -> None:
     assert adapter.dendrite_gate.context_proj.weight.dtype == torch.float16
 
     # 3. Test Telemetry Scaling below 0.001
-    from gwt import MetacognitiveMonitor
+    from cognitive_aug import MetacognitiveMonitor
     monitor = MetacognitiveMonitor()
     monitor.ach = 1.95e-4
     monitor.ne = 0.0005

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytest
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
     ModuleAdapter,
@@ -10,7 +10,7 @@ from gwt import (
     TemporalSurpriseSalience,
     EntropySalience,
 )
-from gwt.neuromod import MetacognitiveMonitor, make_ascii_bar
+from cognitive_aug.neuromod import MetacognitiveMonitor, make_ascii_bar
 
 
 def test_ascii_bar_formatter():

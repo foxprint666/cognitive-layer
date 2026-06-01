@@ -1,5 +1,5 @@
 """
-gwt/telemetry.py
+cognitive_aug/telemetry.py
 ================
 Structured JSON Observability & Telemetry (Phase v0.8 Enterprise Expansion).
 
@@ -14,7 +14,7 @@ import sys
 import time
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("gwt.telemetry")
+logger = logging.getLogger("cognitive_aug.telemetry")
 
 # Global singleton logger
 _telemetry_logger: Optional["GWTTelemetryLogger"] = None

@@ -23,7 +23,7 @@ configfile: pyproject.toml
 collected 7 items
 
 tests\test_engine.py ...                                                 [ 42%]
-tests\test_gwt.py ....                                                   [100%]
+tests\test_cognitive_aug.py ....                                                   [100%]
 
 ============================== 7 passed in 1.32s ==============================
 ```
@@ -36,11 +36,11 @@ tests\test_gwt.py ....                                                   [100%]
    - Confirms correctness of in-memory latent buffer transfers and robust type-checking within `DataFlowManager`.
 3. **`test_engine_module_registration`** (`tests/test_engine.py`):
    - Verifies the auto-projection configuration for modules with mismatched latent spaces and validates forward-pass captures via hooks.
-4. **`test_attention_selector_salience`** (`tests/test_gwt.py`):
+4. **`test_attention_selector_salience`** (`tests/test_cognitive_aug.py`):
    - Validates bottom-up salience attention calculation and row-wise softmax normalizations.
-5. **`test_attention_selector_ignition`** (`tests/test_gwt.py`):
+5. **`test_attention_selector_ignition`** (`tests/test_cognitive_aug.py`):
    - Validates the dynamic attentional ignition threshold gating and fallback routing when all module weights are suppressed.
-6. **`test_hard_selection_straight_through`** (`tests/test_gwt.py`):
+6. **`test_hard_selection_straight_through`** (`tests/test_cognitive_aug.py`):
    - Confirms that hard `selection_mode` selects exact candidate tensors while successfully propagating continuous backward gradients using straight-through estimation.
-7. **`test_full_engine_gwt_cycle`** (`tests/test_gwt.py`):
+7. **`test_full_engine_gwt_cycle`** (`tests/test_cognitive_aug.py`):
    - Verifies the full forward-backward cycle across the entire integrated GWT system with active learning updates.

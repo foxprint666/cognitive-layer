@@ -160,8 +160,12 @@ def test_dendritic_pruning_homeostasis():
     loss = out.sum()
     loss.backward()
     
-    # 2. Check weight gradients
-    grad_weight = gate.context_proj.weight.grad
+    # 2. Check weight gradients. If torch.nn.utils.prune was used, 'weight' is replaced by 'weight_orig'
+    if hasattr(gate.context_proj, "weight_orig"):
+        grad_weight = gate.context_proj.weight_orig.grad
+    else:
+        grad_weight = gate.context_proj.weight.grad
+    
     grad_bias = gate.context_proj.bias.grad
     
     assert grad_weight is not None

@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
     MetacognitiveMonitor,

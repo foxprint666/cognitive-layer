@@ -68,19 +68,19 @@ Install the library directly from PyPI or within your development workspace usin
 
 #### Standard pip environment
 ```bash
-pip install gwt-cognitive-aug
+pip install cognitive-aug
 ```
 
 #### Development & Editable Mode
 ```bash
-git clone https://github.com/your-org/gwt.git
+git clone https://github.com/your-org/cognitive_aug.git
 cd gwt
 pip install -e ".[dev]"
 ```
 
 #### poetry installation
 ```bash
-poetry add gwt-cognitive-aug
+poetry add cognitive-aug
 ```
 
 ---
@@ -92,7 +92,7 @@ The following script demonstrates how to instantiate the engine, register a simp
 ```python
 import torch
 import torch.nn as nn
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
     DendriticModuleAdapter,
@@ -596,7 +596,7 @@ Serializes/deserializes PyTorch tensors as binary blobs with autograd graph isol
 
 ```python
 class RedisStateStore(BaseStateStore):
-    def __init__(self, redis_url: str = "redis://localhost:6379/0", key_prefix: str = "gwt:state", **kwargs: Any) -> None: ...
+    def __init__(self, redis_url: str = "redis://localhost:6379/0", key_prefix: str = "cognitive_aug:state", **kwargs: Any) -> None: ...
 ```
 
 #### Function: `offloaded_enter_sleep_phase`
@@ -651,7 +651,7 @@ Below is a complete, self-contained, and reproducible demonstration script that 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from gwt import (
+from cognitive_aug import (
     ExtendedDendriticModuleAdapter,
     NeurogenesisManager,
     NeurogenesisConsolidationEngine,

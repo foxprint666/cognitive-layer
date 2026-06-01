@@ -1,4 +1,4 @@
 """
-Shim module wrapping gwt.engine.ModuleAdapter.
+Shim module wrapping cognitive_aug.engine.ModuleAdapter.
 """
-from gwt.engine import ModuleAdapter
+from cognitive_aug.engine import ModuleAdapter

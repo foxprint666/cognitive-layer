@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 import pytest
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
 )
-from gwt.concept import ConceptLayer, ConceptInterventionEngine
+from cognitive_aug.concept import ConceptLayer, ConceptInterventionEngine
 
 
 def test_concept_projection_boundaries():

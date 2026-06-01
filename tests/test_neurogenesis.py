@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from gwt import (
+from cognitive_aug import (
     ExtendedDendriticModuleAdapter,
     NeurogenesisManager,
     NeurogenesisConsolidationEngine,

@@ -1,4 +1,4 @@
 """
-Shim module wrapping gwt.engine.
+Shim module wrapping cognitive_aug.engine.
 """
-from gwt.engine import GlobalWorkspace, AttentionSelector, BroadcastEngine
+from cognitive_aug.engine import GlobalWorkspace, AttentionSelector, BroadcastEngine

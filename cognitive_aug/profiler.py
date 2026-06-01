@@ -1,5 +1,5 @@
 """
-gwt/profiler.py
+cognitive_aug/profiler.py
 ===============
 Micro-Benchmarking & Selective Hook Registration Layer (Phase v0.8 Enterprise).
 
@@ -26,7 +26,14 @@ def discover_transformer_layers(model: nn.Module) -> Any:
     """
     Dynamically discover structural sequence paths within open-weights transformer blocks.
     """
-    common_paths = ['model.layers', 'transformer.h', 'transformer.layers', 'model.decoder.layers']
+    common_paths = [
+        'model.layers', 
+        'transformer.h', 
+        'transformer.layers', 
+        'model.decoder.layers',
+        'transformer.encoder.layers',  # ChatGLM
+        'blocks'                       # General fallback
+    ]
     for path in common_paths:
         try:
             parts = path.split('.')
@@ -135,8 +142,11 @@ def profile_submodules(
             return outputs
         return hook_fn
 
-    # Register profiling hooks recursively on all leaf nodes (narrowed to transformer blocks if found)
     for name, module in model.named_modules():
+        # MoE Exclusion: Do not hook internal expert networks to prevent registry explosion and OOM
+        if any(keyword in name.lower() for keyword in ["expert", "mlp.gate"]):
+            continue
+
         if block_submodules is not None and module not in block_submodules:
             continue
         # Hook nn.Linear, nn.Conv2d, and custom Attention layers only
@@ -251,7 +261,7 @@ def register_selective_hooks(
         
         # Dynamically select adapter type and construct with matching device/dtype
         if use_dendritic:
-            from gwt import DendriticModuleAdapter
+            from cognitive_aug import DendriticModuleAdapter
             adapter = DendriticModuleAdapter(
                 name=clean_name,
                 module=module,
@@ -262,7 +272,7 @@ def register_selective_hooks(
                 **kwargs
             )
         else:
-            from gwt import ModuleAdapter
+            from cognitive_aug import ModuleAdapter
             adapter = ModuleAdapter(
                 name=clean_name,
                 module=module,

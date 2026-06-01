@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 import pytest
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
 )
-from gwt.crossbar import CognitiveCrossbar, CrossbarModuleAdapter
+from cognitive_aug.crossbar import CognitiveCrossbar, CrossbarModuleAdapter
 
 
 def test_crossbar_vectorized_parallel_routing():

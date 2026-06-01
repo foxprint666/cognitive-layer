@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytest
 
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     GlobalWorkspace,
     ModuleAdapter,

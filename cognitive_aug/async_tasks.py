@@ -1,5 +1,5 @@
 """
-gwt/async_tasks.py
+cognitive_aug/async_tasks.py
 ==================
 Asynchronous Execution Task Queues & Workers (Phase v0.8 Enterprise Expansion).
 
@@ -92,7 +92,7 @@ celery_app: Optional[Any] = None
 try:
     from celery import shared_task
     
-    @shared_task(name="gwt.tasks.async_sleep_consolidation")
+    @shared_task(name="cognitive_aug.tasks.async_sleep_consolidation")
     def celery_sleep_consolidation(
         engine_state_prefix: str,
         steps: int = 100,
@@ -107,9 +107,9 @@ try:
         """
         logger.info(f"Celery Sleep task triggered for prefix: {engine_state_prefix}")
         # Dynamic import to avoid circular dependency
-        from gwt.state import RedisReplayBufferStore, RedisStateStore
-        from gwt.engine import CognitiveAugEngine
-        from gwt.sleep import CognitiveReplayBuffer
+        from cognitive_aug.state import RedisReplayBufferStore, RedisStateStore
+        from cognitive_aug.engine import CognitiveAugEngine
+        from cognitive_aug.sleep import CognitiveReplayBuffer
         
         # 1. Reconstruct mock engine context in the worker thread
         engine = CognitiveAugEngine()
@@ -160,7 +160,7 @@ def offloaded_enter_sleep_phase(
     """
     if use_celery and "celery_sleep_consolidation" in globals():
         # Offload via Celery task queue
-        prefix = getattr(engine.data_flow._state_store, "key_prefix", "gwt:state")
+        prefix = getattr(engine.data_flow._state_store, "key_prefix", "cognitive_aug:state")
         task = globals()["celery_sleep_consolidation"].delay(
             engine_state_prefix=prefix,
             steps=steps,
@@ -185,7 +185,7 @@ def offloaded_enter_sleep_phase(
                 batch_size=batch_size
             )
             # Log structured metrics in worker thread
-            from gwt.telemetry import get_telemetry_logger
+            from cognitive_aug.telemetry import get_telemetry_logger
             json_logger = get_telemetry_logger()
             json_logger.record_consolidation(telemetry)
 

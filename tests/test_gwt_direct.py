@@ -1,7 +1,7 @@
 import pytest
 import torch
 import torch.nn as nn
-from gwt import (
+from cognitive_aug import (
     CognitiveAugEngine,
     ModuleAdapter,
     GlobalWorkspace,
@@ -28,7 +28,7 @@ class SimpleModule(nn.Module):
         return self.fc(x)
 
 
-def test_gwt_direct_engine_and_workspace():
+def test_cognitive_aug_direct_engine_and_workspace():
     engine = CognitiveAugEngine()
     module = SimpleModule()
     
@@ -60,7 +60,7 @@ def test_gwt_direct_engine_and_workspace():
     assert torch.allclose(adapter.get_last_broadcast(), broadcast)
 
 
-def test_gwt_direct_components():
+def test_cognitive_aug_direct_components():
     # Test selectors
     keys = torch.randn(2, 3, 16)
     query = torch.randn(2, 16)

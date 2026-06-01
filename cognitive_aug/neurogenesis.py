@@ -1,5 +1,5 @@
 """
-gwt/neurogenesis.py
+cognitive_aug/neurogenesis.py
 ===================
 Autonomous Computational Neurogenesis in PyTorch Cognitive Augmentation Layers.
 

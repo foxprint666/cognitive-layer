@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cognitive-aug"
-version = "0.2.7"
-description = "Modular brain-inspired cognitive augmentation layers for neural networks"
+version = "0.2.9"
+description = "A Global Workspace Theory (GWT) meta-learning layer for open weights LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-only" }
@@ -31,4 +31,4 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["cognitive_aug", "gwt"]
+packages = ["cognitive_aug"]

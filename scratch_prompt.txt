@@ -1,0 +1,158 @@
+<USER_REQUEST>
+You are an elite Computational Neuroscientist and a Principal PyTorch Optimization Engineer. 
+
+We are implementing Phase v0.4 of our GWT framework: **Metacognitive Neuromodulation** (`cognitive_aug/neuromod.py`). This module removes hardcoded thresholds by implementing a metacognitive controller that mimics chemical neuromodulation (Acetylcholine and Norepinephrine) to adjust engine thresholds dynamically based on performance metrics (Surprise, Entropy, and Goal Alignment).
+
+Please write a highly optimized, vectorized PyTorch implementation under `cognitive_aug/neuromod.py`.
+
+---
+
+### Architectural Specifications:
+
+1.  **`MetacognitiveMonitor` (Chemical Controller):**
+    * Tracks real-time telemetry from the `DataFlowManager`. 
+    * Computes two dynamic virtual neurotransmitter curves at each step:
+        * **Norepinephrine ($\text{NE}_t$):** Driven by `TemporalSurpriseSalience`. If the current surprise index spikes, $\text{NE}$ surges toward $1.0$. If surprise is low, it decays back to a baseline.
+        * **Acetylcholine ($\text{ACh}_t$):** Driven by `EntropySalience` and Top-Down Goal similarity. High target clarity and low workspace entropy cause $\text{ACh}$ to rise toward $1.0$.
+    * **Math Optimization:** Use smooth, vectorized differential equations or exponential smoothing loops:
+        $$\text{NE}_t = \alpha \cdot \text{NE}_{t-1} + (1-\alpha) \cdot \text{Surprise}_t$$
+
+2.  **`DynamicThresholdAdapter` (Modulating the Knobs):**
+    * This component intercepts the primary parameters of the `CognitiveAugEngine` and updates them *in-place* at the start of every step:
+        * **Ignition Threshold Tuning:** $\text{ignition\_threshold}_t = \text{baseline} - (\beta \cdot \text{NE}_t) + (\gamma \cdot \text{ACh}_t)$. High surprise (NE) drops the gate instantly, enabling low-energy inputs to ignite the workspace. High focus (ACh) raises the gate, keeping out trivial distractions.
+        * **Dendritic Gating Selection Modulation:** Dynamically shifts the parameter scaling or temperature of `ActiveDendriteGate` based on $\text{ACh}_t$, forcing sharp sparsity when focus is high.
+
+3.  **Performance & Circular Import Shielding:**
+    * The monitor must execute completely under a `with torch.no_grad():` block to prevent gradient graph overhead from clogging the active model training loop.
+    * Use lazy internal execution references to prevent circular package dependencies between `cognitive_aug/engine.py` and `cognitive_aug/neuromod.py`.
+
+---
+
+### Developer Experience & Telemetry:
+* **The Endpoint:** The user should hook this layer in with a simple engine attachment: `engine.attach_neuromodulator(MetacognitiveMonitor())`.
+* **Telemetry Extension:** Update the main `.inspect()` method to print a gorgeous text bar representing the chemical levels:
+    `[ ACh: ▇▇▇▇░░░░ 0.52 | NE: ▇▇░░░░░░ 0.21 ]`
+
+### Expected Output:
+1. Complete, robust, typed code for `cognitive_aug/neuromod.py`.
+2. Integration details or extension code hooks for `cognitive_aug/engine.py`.
+3. A pytest file (`tests/test_neuromod.py`) that feeds a sudden "surprise spike" tensor into the engine and asserts that `ignition_threshold` drops automatically on the next step.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-05-27T15:27:13+05:30.
+</ADDITIONAL_METADATA>
+===MATCH===
+I will now create the detailed `implementation_plan.md` artifact for Phase v0.4: **Metacognitive Neuromodulation** (`cognitive_aug/neuromod.py`). This document will detail the chemical controller dynamics, in-place threshold adapters, ASCII inspect dashboard formatting, and a rigorous verification plan. I will set the metadata to request your feedback.
+===MATCH===
+Created At: 2026-05-28T05:30:38Z
+Completed At: 2026-05-28T05:30:38Z
+File Path: `file:///C:/Users/ASHLEY%20ALLEN/.gemini/antigravity/brain/12a87063-b3c1-48ec-9588-5ad8bc811db1/implementation_plan.md`
+Total Lines: 104
+Total Bytes: 5874
+Showing lines 1 to 104
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: # Phase v0.4: Metacognitive Neuromodulation (cognitive_aug/neuromod.py) Implementation Plan
+2: 
+3: In biological brains, chemical neuromodulators (like Acetylcholine and Norepinephrine) dynamically regulate synaptic plasticity, attention thresholds, and exploration-exploitation trade-offs at a metacognitive level based on internal states (like surprise, uncertainty, and target clarity). Phase v0.4 introduces a metacognitive neuromodulator that dynamically tunes GWT ignition thresholds and active dendritic gates.
+4: 
+5: ## Goal Description
+6: Implement the chemical neuromodulation controller (`MetacognitiveMonitor`), in-place parameter adaptation mechanics (`DynamicThresholdAdapter`), a custom ASCII inspection dashboard on `CognitiveAugEngine`, and their non-intrusive integration in `cognitive_aug/engine.py`.
+7: 
+8: ---
+9: 
+10: ## User Review Required
+11: 
+12: > [!IMPORTANT]
+13: > **Neuromodulatory Gating & Sparsity Mechanics:**
+14: > We will implement biological Acetylcholine ($\text{ACh}_t$) gain modulation on dendritic gates in two complementary ways:
+15: > 1. **NMDA Threshold Spiking**: The spike threshold increases with $\text{ACh}$ focus to enforce strict sparsity:
+16: >    $$\text{threshold}_t = \text{baseline\_threshold} + 0.3 \cdot \text{ACh}_t$$
+17: > 2. **Gain Sigmoid Temperature**: The sigmoid slope is sharpened by dividing raw projections by a temperature that drops with $\text{ACh}$ focus, simulating selective high-contrast attention:
+18: >    $$\text{temp}_t = 1.0 - 0.5 \cdot \text{ACh}_t$$
+19: >    $$\text{branch\_raw}_t = \f
+<truncated 2772 bytes>
+ zero circular-import dependencies by lazily importing `cognitive_aug/neuromod.py` inside `inspect()` and `attach_neuromodulator()`.
+66: 
+67: ---
+68: 
+69: #### [MODIFY] [__init__.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/cognitive_aug/__init__.py)
+70: - Expose `MetacognitiveMonitor` and `DynamicThresholdAdapter` in the public `gwt` API.
+71: 
+72: ---
+73: 
+74: #### [MODIFY] [__init__.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/cognitive_aug/__init__.py)
+75: - Expose the neuromodulation components for backward compatibility.
+76: 
+77: ---
+78: 
+79: #### [NEW] [neuromod.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/cognitive_aug/neuromod.py)
+80: - Create sub-module shim for direct imports from `cognitive_aug.neuromod`.
+81: 
+82: ---
+83: 
+84: ## Verification Plan
+85: 
+86: ### Automated Tests
+87: Run tests with:
+88: ```powershell
+89: & "C:\Users\ASHLEY ALLEN\AppData\Local\Python\bin\python.exe" -m pytest
+90: ```
+91: 
+92: We will create [test_neuromod.py](file:///c:/Users/ASHLEY%20ALLEN/OneDrive/pypack/tests/test_neuromod.py):
+93: 1. **`test_chemical_monitor_curves`**: Asserts that `NE` and `ACh` follow mathematical smoothed differential curves accurately under surprise/entropy changes.
+94: 2. **`test_dynamic_threshold_modulation`**: Feeds a sudden surprise spike into the engine and asserts that `ignition_threshold` drops automatically on the next step.
+95: 3. **`test_dendritic_gain_and_sparsity_modulation`**: Asserts that high focus (`ACh` rise) increases dendritic spike thresholds and sharpens sigmoid gain temperature.
+96: 4. **`test_inspect_dashboard_telemetry`**: Verifies that `.inspect()` returns a gorgeous string containing the formatted chemical bars.
+97: 
+98: ### Manual Verification
+99: - Verify all 29 existing tests + 4 new neuromodulation tests pass successfully.
+100: - Verify that a developer can attach the neuromodulator in one line:
+101:   ```python
+102:   engine.attach_neuromodulator(MetacognitiveMonitor())
+103:   ```
+104: 
+The above content shows the entire, complete file contents of the requested file.
+
+===MATCH===
+I will search the conversation log for the term "Metacognitive Neuromodulation" to retrieve the full, untruncated architectural specifications for Phase v0.4.
+===MATCH===
+Created At: 2026-05-28T05:31:11Z
+Completed At: 2026-05-28T05:31:14Z
+
+				The command failed with exit code: 1
+				Output:
+				Traceback (most recent call last):
+
+  File "<string>", line 1, in <module>
+
+    import json; f=open(r'C:\Users\ASHLEY ALLEN\.gemini\antigravity\brain\12a87063-b3c1-48ec-9588-5ad8bc811db1\.system_generated\logs\transcript.jsonl', 'r', encoding='utf-8'); [print(json.loads(line)['content']) for line in f if 'Metacognitive Neuromodulation' in line.get('content', '')]
+
+                                                                                                                                                                                                                                                                         ^^^^^^^^
+
+AttributeError: 'str' object has no attribute 'get'
+
+
+
+===MATCH===
+Created At: 2026-05-28T05:31:15Z
+Completed At: 2026-05-28T05:31:17Z
+
+				The command failed with exit code: 1
+				Output:
+				Traceback (most recent call last):
+
+  File "<string>", line 1, in <module>
+
+    import json; f=open(r'C:\Users\ASHLEY ALLEN\.gemini\antigravity\brain\12a87063-b3c1-48ec-9588-5ad8bc811db1\.system_generated\logs\transcript.jsonl', 'r', encoding='utf-8'); [print(d['content']) for line in f if (d:=json.loads(line)) and 'Metacognitive Neuromodulation' in d.get('content', '')]
+
+                                                                                                                                                                                  ~~~~~^^^^^^^^^^^^^^
+
+  File "C:\Users\ASHLEY ALLEN\AppData\Local\Python\pythoncore-3.14-64\Lib\encodings\cp1252.py", line 19, in encode
+
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 2818-2825: character maps to <undefined>
+
+
