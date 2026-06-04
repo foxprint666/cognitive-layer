@@ -59,14 +59,16 @@ def test_engine_module_registration():
     engine = CognitiveAugEngine()
     toy = ToyModule(in_dim=5, out_dim=5)
 
-    adapter = engine.register_module(name="toy", module=toy, latent_dim=10, projection_in_dim=5)
+    adapter = engine.register_module(
+        name="toy", module=toy, latent_dim=10, projection_in_dim=5
+    )
     assert "toy" in engine.registry.list_names()
     assert adapter.latent_dim == 10
     assert adapter.projection is not None
 
     # Verify forward pass hook updates buffers automatically
     dummy_input = torch.randn(4, 5)
-    toy_out = toy(dummy_input)
+    toy(dummy_input)
 
     # Output should have been intercepted and projected to 10
     buffer_state = engine.data_flow.get_buffer("toy")

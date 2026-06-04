@@ -18,7 +18,7 @@ and the full output of engine.inspect().
 """
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -70,7 +70,9 @@ class BenchmarkHybridAdapter(DendriticModuleAdapter):
             latent = outputs[0] if isinstance(outputs, (tuple, list)) else outputs
 
             if not isinstance(latent, torch.Tensor):
-                raise TypeError(f"Expected tensor output from module '{self.name}', got {type(outputs)}")
+                raise TypeError(
+                    f"Expected tensor output from module '{self.name}', got {type(outputs)}"
+                )
 
             # Initialize dendritic gate lazily if needed
             if self.dendrite_gate is None:
@@ -82,7 +84,12 @@ class BenchmarkHybridAdapter(DendriticModuleAdapter):
             if context.shape[0] == 1 and batch_size > 1:
                 context = context.expand(batch_size, -1)
             elif context.shape[0] != batch_size:
-                context = torch.zeros(batch_size, self.latent_dim, device=latent.device, dtype=latent.dtype)
+                context = torch.zeros(
+                    batch_size,
+                    self.latent_dim,
+                    device=latent.device,
+                    dtype=latent.dtype,
+                )
 
             # 1. Apply Active Dendritic Gating (Phase v0.2)
             gated_latent = self.dendrite_gate(latent, context)
@@ -109,6 +116,7 @@ class BenchmarkHybridAdapter(DendriticModuleAdapter):
 def main() -> None:
     # Set console encoding to UTF-8 to handle GWT dashboard emojis and symbols on Windows
     import sys
+
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -169,7 +177,9 @@ def main() -> None:
 
     # Phase v0.7: Cross-Modal Cognitive Crossbar
     slot_names = ["TowerSlot", "ConceptSlot"]
-    crossbar = CognitiveCrossbar(slot_dim=latent_dim, num_slots=2, slot_names=slot_names).to(device)
+    crossbar = CognitiveCrossbar(
+        slot_dim=latent_dim, num_slots=2, slot_names=slot_names
+    ).to(device)
     engine.attach_crossbar(crossbar)
 
     # Wrap the tower using the custom benchmark hybrid adapter (slot 0)
@@ -214,11 +224,15 @@ def main() -> None:
         optimizer.zero_grad()
 
         # 1. Forward pass on Task A
-        tower_out = tower(task_a_input)  # Triggers tower_adapter hook: writes to Crossbar slot 0
-        concept_out = concept_layer(tower_out)  # Triggers concept_adapter hook: writes to Crossbar slot 1
+        tower_out = tower(
+            task_a_input
+        )  # Triggers tower_adapter hook: writes to Crossbar slot 0
+        concept_layer(
+            tower_out
+        )  # Triggers concept_adapter hook: writes to Crossbar slot 1
 
         # 2. Step GWT engine to perform cross-attention routing & metacognitive chemistry
-        broadcast = engine.step()
+        engine.step()
 
         # 3. Compute loss
         loss = F.mse_loss(tower_out, task_a_target)
@@ -233,15 +247,17 @@ def main() -> None:
             pre_shift_loss = loss.item()
             print(f"    -> Step 5 Loss (Task A): {pre_shift_loss:.6f}")
 
-    print("\n[*] CUTOVER: Instantly switching to Task B (Step 6) to trigger NE surprise...")
+    print(
+        "\n[*] CUTOVER: Instantly switching to Task B (Step 6) to trigger NE surprise..."
+    )
     optimizer.zero_grad()
 
     # Cutover forward pass on Task B
     tower_out = tower(task_b_input)
-    concept_out = concept_layer(tower_out)
+    concept_layer(tower_out)
 
     # Step GWT engine
-    broadcast = engine.step()
+    engine.step()
 
     # Compute Task B loss
     loss = F.mse_loss(tower_out, task_b_target)
@@ -255,20 +271,28 @@ def main() -> None:
     surprise_ne = monitor.ne
     surprise_ach = monitor.ach
     print(f"    -> Step 6 Loss (Task B): {post_shift_loss:.6f}")
-    print(f"    -> Neuromodulator State: ACh = {surprise_ach:.4f} | NE (Surprise Spike!) = {surprise_ne:.4f}")
+    print(
+        f"    -> Neuromodulator State: ACh = {surprise_ach:.4f} | NE (Surprise Spike!) = {surprise_ne:.4f}"
+    )
 
     # Apply a manual causal intervention on concept 2 ("Exploratory") to demonstrate Phase v0.6 clamping
-    print("\n[*] Applying Causal Intervention: Forcing Concept 2 ('Exploratory') to 1.0...")
+    print(
+        "\n[*] Applying Causal Intervention: Forcing Concept 2 ('Exploratory') to 1.0..."
+    )
     concept_layer.intervention_engine.set_intervention(2, 1.0)
 
     # Re-run a forward pass to apply the causal override
     tower_out = tower(task_b_input)
-    concept_out = concept_layer(tower_out)
+    concept_layer(tower_out)
     engine.step()
 
     # ── 4. Offline Sleep & Memory Consolidation ────────────────────────────────
-    print("\n[*] Entering Offline Sleep Phase (SWS replay & structural dendritic pruning)...")
-    sleep_telemetry = engine.enter_sleep_phase(steps=5, learning_rate=0.01, pruning_threshold=0.2)
+    print(
+        "\n[*] Entering Offline Sleep Phase (SWS replay & structural dendritic pruning)..."
+    )
+    sleep_telemetry = engine.enter_sleep_phase(
+        steps=5, learning_rate=0.01, pruning_threshold=0.2
+    )
 
     wall_time = time.perf_counter() - start_time
 
@@ -279,10 +303,18 @@ def main() -> None:
     print(f"  Total Benchmarking Wall Time : {wall_time:.4f} seconds")
     print(f"  Pre-Shift Loss (Task A Step 5) : {pre_shift_loss:.6f}")
     print(f"  Post-Shift Loss (Task B Step 6): {post_shift_loss:.6f}")
-    print(f"  Initial Chemical Levels      : ACh = {initial_ach:.4f} | NE = {initial_ne:.4f}")
-    print(f"  Surprise Chemical Levels     : ACh = {surprise_ach:.4f} | NE = {surprise_ne:.4f}")
-    print(f"  Memory Traces Replayed       : {sleep_telemetry.get('memory_traces_replayed', 0)}")
-    print(f"  Dendritic Branches Pruned    : {sleep_telemetry.get('dendritic_branches_pruned', 0)}")
+    print(
+        f"  Initial Chemical Levels      : ACh = {initial_ach:.4f} | NE = {initial_ne:.4f}"
+    )
+    print(
+        f"  Surprise Chemical Levels     : ACh = {surprise_ach:.4f} | NE = {surprise_ne:.4f}"
+    )
+    print(
+        f"  Memory Traces Replayed       : {sleep_telemetry.get('memory_traces_replayed', 0)}"
+    )
+    print(
+        f"  Dendritic Branches Pruned    : {sleep_telemetry.get('dendritic_branches_pruned', 0)}"
+    )
     print("=" * 60)
     print("\n" + engine.inspect())
 

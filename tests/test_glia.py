@@ -9,7 +9,6 @@ from cognitive_aug import (
     DendriticModuleAdapter,
     MetacognitiveMonitor,
     AstrocyteManager,
-    GradientSanitizerHook,
 )
 
 
@@ -161,7 +160,7 @@ def test_grad_sanitizer_damps_spikes():
         outputs = adapter.module(inputs)
         loss = outputs.sum()
         loss.backward()
-        
+
         # Calling adjust_learning_rates resets the hook status to Stable
         manager.adjust_learning_rates(optimizer)
         optimizer.step()

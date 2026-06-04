@@ -7,8 +7,6 @@ from cognitive_aug import (
     GlobalWorkspace,
     ModuleAdapter,
     DendriticModuleAdapter,
-    TemporalSurpriseSalience,
-    EntropySalience,
 )
 from cognitive_aug.neuromod import MetacognitiveMonitor, make_ascii_bar
 
@@ -51,7 +49,7 @@ def test_chemical_monitor_curves():
     noisy_input1 = torch.randn(2, 5)
     _ = toy_model(noisy_input1)
     _ = engine.step()
-    
+
     # First step: no history, surprise = 0, so NE should be virtually 0.0
     assert monitor.ne < 1e-6
 
@@ -63,7 +61,7 @@ def test_chemical_monitor_curves():
     # NE and ACh should both rise now
     assert monitor.ne > 0.0
     assert monitor.ach > 0.0
-    
+
     prev_ne = monitor.ne
 
     # 5. Step 3: Feed the same input again -> surprise drops to 0.0, NE should decay
@@ -80,7 +78,9 @@ def test_dynamic_threshold_modulation():
     engine = CognitiveAugEngine()
     latent_dim = 8
     # Start with a high ignition threshold baseline
-    workspace = GlobalWorkspace(latent_dim=latent_dim, key_dim=4, ignition_threshold=0.8)
+    workspace = GlobalWorkspace(
+        latent_dim=latent_dim, key_dim=4, ignition_threshold=0.8
+    )
     engine.attach_workspace(workspace)
 
     toy_model = nn.Linear(5, latent_dim)
@@ -172,7 +172,7 @@ def test_inspect_dashboard_telemetry():
     monitor.ne = 0.21
 
     report = engine.inspect()
-    
+
     # Verify chemical bar and diagnostic structures
     assert "COGNITIVE ENGINE DIAGNOSTIC PANEL" in report
     assert "ACh:" in report
