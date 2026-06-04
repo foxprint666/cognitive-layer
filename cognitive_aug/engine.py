@@ -231,7 +231,7 @@ class ModuleAdapter(nn.Module):
 
     def remove_hooks(self) -> None:
         """Clean up registered forward hooks."""
-        if self._hook_handle is not None:
+        if getattr(self, "_hook_handle", None) is not None:
             self._hook_handle.remove()
             self._hook_handle = None
             logger.debug(f"Removed forward hook from module '{self.name}'.")

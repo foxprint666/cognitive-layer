@@ -41,9 +41,13 @@ graph TD
         ADG -->|Modulated Features| CL[Concept Layer Bottleneck]
     end
 
-    subgraph ACN ["Autonomous Computational Neurogenesis (Phase v0.9)"]
+    subgraph ACN ["Autonomous Computational Neurogenesis (Phase v0.9 & v1.0)"]
         MM -->|NE Surprise Trigger| NM[Neurogenesis Manager]
-        NM -->|Add Dendritic Branch| EDMA[Extended Dendritic Module Adapter]
+        NM -->|Transfer Salience Check| TSC[Transfer Salience Calculator]
+        TSC -->|Overlap > 0.7| IA[Instant Adapter]
+        TSC -->|Overlap > 0.3| AL[Average Learner]
+        TSC -->|Negative Transfer| EB[Expert Beginner]
+        IA & AL & EB -->|Add/Bridge Dendritic Branch| EDMA[Extended Dendritic Module Adapter]
         NAM[Neurogenesis Astrocyte Manager] -->|Growth Excitotoxicity Safety| NM
         EDMA -->|Active NMDA Gating| GW
     end
@@ -74,8 +78,8 @@ pip install cognitive-aug
 
 #### Development & Editable Mode
 ```bash
-git clone https://github.com/your-org/cognitive_aug.git
-cd gwt
+git clone https://github.com/foxprint666/cognitive-layer.git
+cd cognitive-layer
 pip install -e ".[dev]"
 ```
 
@@ -144,7 +148,7 @@ outputs = model(inputs)  # Adapter automatically intercepts latents via hooks
 broadcast_state = engine.step()  # Computes GWT routing and ACh/NE curves
 
 print(f"[*] Broadcast Context Shape: {broadcast_state.shape}")
-print(engine.inspect())  # Displays gorgeous live terminal telemetry dashboard!
+print(engine.inspect())  # Displays live terminal telemetry dashboard! (On Windows, you may need to set PYTHONIOENCODING=utf-8)
 ```
 
 ---
@@ -711,7 +715,7 @@ manager = NeurogenesisManager(
 # 4. Simulate a training pass under unexpected high uncertainty (NE surprise spike)
 x = torch.randn(2, in_dim)
 context = torch.randn(2, context_dim)
-metrics = {"NE_surprise": torch.tensor(0.95), "ACh_focus": torch.tensor(0.1)}
+metrics = {"NE_surprise": torch.tensor(0.95), "ACh_focus": torch.tensor(0.1), "current_latent": context}
 
 print(f"Pre-neurogenesis branches count: {len(adapter.branches)}")
 
