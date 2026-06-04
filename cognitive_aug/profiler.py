@@ -144,7 +144,7 @@ def profile_submodules(
 
     for name, module in model.named_modules():
         # MoE Exclusion: Do not hook internal expert networks to prevent registry explosion and OOM
-        if any(keyword in name.lower() for keyword in ["expert", "mlp.gate"]):
+        if any(keyword in name.lower() for keyword in ["expert", "mlp.gate", "mlp_gate", "mlp"]):
             continue
 
         if block_submodules is not None and module not in block_submodules:
@@ -212,6 +212,7 @@ def register_selective_hooks(
     dummy_input: Any,
     selective_ratio: float = 0.3,
     use_dendritic: bool = True,
+    use_extended_dendritic: bool = False,
     **kwargs: Any,
 ) -> List[Any]:
     """
@@ -227,6 +228,7 @@ def register_selective_hooks(
         dummy_input     : A representative batch of inputs.
         selective_ratio : Fraction of profiled layers to hook (e.g. 0.3 = top 30% of layers).
         use_dendritic   : Whether to use DendriticModuleAdapter (Phase v0.2) or standard ModuleAdapter.
+        use_extended_dendritic: Whether to use ExtendedDendriticModuleAdapter (Phase v0.8) for neurogenesis.
         
     Returns:
         List of registered adapter instances.
@@ -260,7 +262,18 @@ def register_selective_hooks(
         clean_name = name.replace(".", "_")
         
         # Dynamically select adapter type and construct with matching device/dtype
-        if use_dendritic:
+        if use_extended_dendritic:
+            from cognitive_aug.neurogenesis import ExtendedDendriticModuleAdapter
+            adapter = ExtendedDendriticModuleAdapter(
+                name_or_feedforward_dim=clean_name,
+                module_or_context_dim=module,
+                latent_dim=latent_dim,
+                data_flow=engine.data_flow,
+                device=model_device,
+                dtype=model_dtype,
+                **kwargs
+            )
+        elif use_dendritic:
             from cognitive_aug import DendriticModuleAdapter
             adapter = DendriticModuleAdapter(
                 name=clean_name,

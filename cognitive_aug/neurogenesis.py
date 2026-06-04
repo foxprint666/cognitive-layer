@@ -14,44 +14,220 @@ from typing import Dict, List, Any, Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 
+from .engine import ModuleAdapter
+
 logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 0. Transfer Salience Calculator
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TransferSalienceCalculator:
+    """
+    Before growing a new branch, measures how much
+    existing pathways overlap with the new domain.
+    
+    High overlap = fast pathway bridging
+    Low overlap = slow growth from scratch
+    """
+    def calculate_transfer_potential(
+        self, 
+        existing_adapters: List[nn.Module],
+        new_domain_latent: torch.Tensor
+    ) -> float:
+        if not existing_adapters or new_domain_latent is None:
+            return 0.0
+            
+        transfer_scores = []
+        # Pool/average the latent state across batch and sequence dims to a single vector
+        latent_vec = new_domain_latent.mean(dim=0)
+        if latent_vec.dim() > 1:
+            latent_vec = latent_vec.mean(dim=0)
+            
+        for adapter in existing_adapters:
+            target = adapter
+            if hasattr(adapter, "adapter"):
+                target = getattr(adapter, "adapter")
+                
+            if hasattr(target, "consolidated_representation"):
+                rep = target.consolidated_representation
+                # Ensure device compatibility
+                rep_aligned = rep.to(device=latent_vec.device, dtype=latent_vec.dtype)
+                
+                # Check for zero norm to prevent NaNs
+                if rep_aligned.norm() > 0 and latent_vec.norm() > 0:
+                    similarity = F.cosine_similarity(
+                        rep_aligned.unsqueeze(0),
+                        latent_vec.unsqueeze(0)
+                    ).item()
+                    transfer_scores.append(similarity)
+                else:
+                    transfer_scores.append(0.0)
+                    
+        if not transfer_scores:
+            return 0.0
+        return max(transfer_scores)  # Best existing overlap
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Extended Dendritic Module Adapter & Active Gating
 # ─────────────────────────────────────────────────────────────────────────────
 
-class ExtendedDendriticModuleAdapter(nn.Module):
+class ExtendedDendriticModuleAdapter(ModuleAdapter):
     """
     Extends the static DendriticModuleAdapter to support runtime branch allocation,
     active NMDA-threshold gating, and branch pruning.
+    Can be instantiated as a standard nn.Module or a GWT ModuleAdapter hook.
     """
-    def __init__(self, feedforward_dim: int, context_dim: int, initial_branches: int = 1):
-        super().__init__()
-        self.in_dim = feedforward_dim
-        self.ctx_dim = context_dim
-        self.theta_nmda = nn.Parameter(torch.tensor(0.5))  # NMDA threshold
+    def __init__(
+        self,
+        name_or_feedforward_dim: Any,
+        module_or_context_dim: Any = None,
+        latent_dim: Optional[int] = None,
+        data_flow: Optional[Any] = None,
+        key_dim: int = 64,
+        projection_in_dim: Optional[int] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+        initial_branches: int = 1,
+        **kwargs: Any
+    ):
+        if isinstance(name_or_feedforward_dim, str):
+            # GWT Hook mode
+            name = name_or_feedforward_dim
+            module = module_or_context_dim
+            assert isinstance(module, nn.Module), "module must be a nn.Module in GWT Hook mode"
+            
+            super().__init__(
+                name=name,
+                module=module,
+                latent_dim=latent_dim,
+                data_flow=data_flow,
+                key_dim=key_dim,
+                projection_in_dim=projection_in_dim,
+                device=device,
+                dtype=dtype,
+                **kwargs
+            )
+            self.is_gwt_hook = True
+            self.in_dim = self._detect_output_dim(module) or latent_dim
+            self.ctx_dim = latent_dim
+        else:
+            # Standalone module mode (e.g. OpenWeightsAdapterHook)
+            nn.Module.__init__(self)
+            self.is_gwt_hook = False
+            self.in_dim = name_or_feedforward_dim
+            self.ctx_dim = module_or_context_dim
+            self.latent_dim = self.ctx_dim
+            self.name = f"extended_dendrite_{id(self)}"
+
+        self.theta_nmda = nn.Parameter(torch.tensor(0.5, device=device, dtype=dtype))
 
         # Parallel computational paths
         self.branches = nn.ModuleList([
-            nn.Linear(self.in_dim, self.in_dim, bias=False) for _ in range(initial_branches)
+            nn.Linear(self.in_dim, self.in_dim, bias=False, device=device, dtype=dtype) for _ in range(initial_branches)
         ])
         self.dendritic_gates = nn.ModuleList([
-            nn.Linear(self.ctx_dim, self.in_dim, bias=True) for _ in range(initial_branches)
+            nn.Linear(self.ctx_dim, self.in_dim, bias=True, device=device, dtype=dtype) for _ in range(initial_branches)
         ])
+
+        # Track consolidated representations
+        self.register_buffer("consolidated_representation", torch.zeros(self.ctx_dim, device=device, dtype=dtype))
 
         # State tracking via PyTorch ParameterDict
         self.branch_states = nn.ParameterDict()
         for idx in range(initial_branches):
             self._init_branch_state(idx, permanent=True)
 
+    def _detect_output_dim(self, module: nn.Module) -> Optional[int]:
+        """Tries to statically inspect the output dimension of the module layers."""
+        if isinstance(module, nn.Linear):
+            return module.out_features
+        for conv_cls in [nn.Conv1d, nn.Conv2d, nn.Conv3d]:
+            if isinstance(module, conv_cls):
+                return module.out_channels
+        for rnn_cls in [nn.LSTM, nn.GRU, nn.RNN]:
+            if isinstance(module, rnn_cls):
+                return module.hidden_size
+
+        for attr in ["out_features", "out_channels", "hidden_size", "output_dim", "latent_dim", "d_model"]:
+            if hasattr(module, attr):
+                val = getattr(module, attr)
+                if isinstance(val, int):
+                    return val
+
+        for child in reversed(list(module.children())):
+            dim = self._detect_output_dim(child)
+            if dim is not None:
+                return dim
+        return None
+
+    def _register_forward_hook(self) -> None:
+        """Overrides parent forward hook to intercept and apply active dendritic gating."""
+
+        def hook_fn(module: nn.Module, inputs: Any, outputs: Any) -> Any:
+            # 1. Extract the primary latent tensor (handling tuples or lists)
+            is_tuple = isinstance(outputs, tuple)
+            is_list = isinstance(outputs, list)
+            if is_tuple or is_list:
+                latent = outputs[0]
+            else:
+                latent = outputs
+
+            if not isinstance(latent, torch.Tensor):
+                raise TypeError(
+                    f"Expected tensor output from module '{self.name}', "
+                    f"got {type(outputs)}"
+                )
+
+            # 2. Retrieve global GWT context broadcast vector
+            context = self.get_last_broadcast()
+
+            # 3. Handle mismatch in batch dimension
+            batch_size = latent.shape[0]
+            if context.shape[0] == 1 and batch_size > 1:
+                context = context.expand(batch_size, -1)
+            elif context.shape[0] != batch_size:
+                context = torch.zeros(batch_size, self.latent_dim, device=latent.device, dtype=latent.dtype)
+
+            context = context.to(device=latent.device, dtype=latent.dtype)
+
+            # 4. Apply dendritic gating/branches
+            gated_latent = self.forward_dendrite(latent, context)
+
+            # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
+            from .salience import global_pool_latent
+            gwt_latent = global_pool_latent(gated_latent)
+
+            # 5. Apply optional learnable projection to workspace dimension
+            if self.projection is not None:
+                gwt_latent = self.projection(gwt_latent)
+
+            # Store the GWT representation inside the DataFlowManager
+            self.data_flow.update_buffer(self.name, gwt_latent)
+
+            # 6. Return the gated features preserving the original output wrapper structure
+            if is_tuple:
+                return (gated_latent,) + outputs[1:]
+            elif is_list:
+                return [gated_latent] + list(outputs[1:])
+            else:
+                return gated_latent
+
+        self._hook_handle = self.module.register_forward_hook(hook_fn)
+        logger.debug(f"Extended Dendritic forward hook successfully registered on module '{self.name}'.")
+
     def _init_branch_state(self, idx: int, permanent: bool):
         # State tensor format: [age, utilization, consolidation_score, active_flag]
+        device = self.theta_nmda.device
+        dtype = self.theta_nmda.dtype
         state = nn.Parameter(torch.tensor([
             0.0, 0.0, 1.0 if permanent else 0.0, 1.0
-        ]), requires_grad=False)
+        ], device=device, dtype=dtype), requires_grad=False)
         self.branch_states[f"state_{idx}"] = state
 
     def add_dendritic_branch(self) -> int:
@@ -60,10 +236,13 @@ class ExtendedDendriticModuleAdapter(nn.Module):
         to ensure the forward pass remains stable at the moment of integration.
         """
         new_idx = len(self.branches)
-        new_proj = nn.Linear(self.in_dim, self.in_dim, bias=False)
+        device = self.theta_nmda.device
+        dtype = self.theta_nmda.dtype
+        
+        new_proj = nn.Linear(self.in_dim, self.in_dim, bias=False, device=device, dtype=dtype)
         nn.init.zeros_(new_proj.weight)
 
-        new_gate = nn.Linear(self.ctx_dim, self.in_dim, bias=True)
+        new_gate = nn.Linear(self.ctx_dim, self.in_dim, bias=True, device=device, dtype=dtype)
         nn.init.zeros_(new_gate.weight)
         nn.init.zeros_(new_gate.bias)
 
@@ -80,7 +259,7 @@ class ExtendedDendriticModuleAdapter(nn.Module):
         if hasattr(self.branches[idx], "bias") and self.branches[idx].bias is not None:
             self.branches[idx].bias.data.zero_()
 
-    def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+    def forward_dendrite(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         out = torch.zeros_like(x)
         for idx, (proj, gate) in enumerate(zip(self.branches, self.dendritic_gates)):
             state = self.branch_states[f"state_{idx}"]
@@ -89,6 +268,13 @@ class ExtendedDendriticModuleAdapter(nn.Module):
             if active_flag > 0.5:
                 # Active NMDA Gating calculation
                 dendritic_activation = gate(context)
+                
+                # Align dendritic_activation's dimensions with x for sequence models
+                if x.dim() > dendritic_activation.dim():
+                    unsqueezed_dims = x.dim() - dendritic_activation.dim()
+                    for _ in range(unsqueezed_dims):
+                        dendritic_activation = dendritic_activation.unsqueeze(1)
+                        
                 # Sigmoidal NMDA threshold activation function
                 nmda_gate = torch.sigmoid(dendritic_activation - self.theta_nmda)
                 branch_output = proj(x) * nmda_gate
@@ -98,7 +284,12 @@ class ExtendedDendriticModuleAdapter(nn.Module):
                 if self.training:
                     state.data[0] += 1.0  # Age
                     state.data[1] += torch.mean(nmda_gate).detach()  # Utilization
-        return out
+                    # Update running representation average
+                    self.consolidated_representation.data = 0.95 * self.consolidated_representation.data + 0.05 * context.mean(dim=0).detach()
+        return x + out  # Residual connection
+
+    def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+        return self.forward_dendrite(x, context)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -132,14 +323,34 @@ class NeurogenesisManager:
         self.active_neuro_events = []
         self.neuron_registry = {}
 
+        # NEW: Transfer Salience Calculator & Suppression States
+        self.transfer_calculator = TransferSalienceCalculator()
+        self.suppressed_adapters = {}  # target_id -> remaining_steps
+        self.suppressed_adapters_refs = {}  # target_id -> (adapter_ref, branch_idx)
+
     def step(self, step_idx: int, metrics: Dict[str, Any], adapters: List[nn.Module]) -> str:
         """
         Monitors incoming metrics, evaluates the birth criteria, and coordinates
         new dendritic path generation across registered adapters.
         """
         self.steps_since_last_birth += 1
+        
+        # Decrement interference suppression cooldowns statefully
+        for target_id, remaining in list(self.suppressed_adapters.items()):
+            if remaining <= 1:
+                # Restore active state
+                adapter_ref, branch_idx = self.suppressed_adapters_refs[target_id]
+                state = adapter_ref.branch_states[f"state_{branch_idx}"]
+                state.data[3] = 1.0  # Reactivate active_flag
+                del self.suppressed_adapters[target_id]
+                del self.suppressed_adapters_refs[target_id]
+                print(f"    [Restoration] Reactivated suppressed branch {branch_idx} on module {adapter_ref.name}")
+            else:
+                self.suppressed_adapters[target_id] = remaining - 1
+
         ne_surprise = metrics.get("NE_surprise")
         ach_focus = metrics.get("ACh_focus", torch.tensor(0.0))
+        current_latent = metrics.get("current_latent")
 
         if ne_surprise is None:
             return "idle"
@@ -153,21 +364,138 @@ class NeurogenesisManager:
             if not self.astrocyte_manager.evaluate_growth_safety():
                 return "suppressed_by_excitotoxicity_protection"
 
-            # Trigger neurogenesis across target adapters
-            for adapter in adapters:
-                # Target adapter itself or its internal adapter
-                target = adapter
-                if hasattr(adapter, "adapter"):
-                    target = getattr(adapter, "adapter")
+            # NEW: Calculate transfer potential using latent overlap
+            transfer_potential = 0.0
+            if current_latent is not None:
+                transfer_potential = self.transfer_calculator.calculate_transfer_potential(
+                    adapters, current_latent
+                )
+            
+            print(f"    [Transfer Salience] Evaluated transfer potential: {transfer_potential:.4f}")
 
-                if hasattr(target, "add_dendritic_branch"):
-                    new_idx = target.add_dendritic_branch()
-                    self._register_neuron_state(target, new_idx, ne_surprise.item())
-
-            self.steps_since_last_birth = 0
-            return "neurogenesis_triggered"
+            # Route based on computed transfer potential
+            if transfer_potential > 0.7:
+                # INSTANT ADAPTER: High overlap (>0.7) - bridge existing pathways
+                self._bridge_to_existing_pathway(adapters, current_latent, transfer_potential)
+                self.steps_since_last_birth = 0
+                return "neurogenesis_triggered"
+                
+            elif transfer_potential > 0.3:
+                # AVERAGE LEARNER: Medium overlap (0.3-0.7) - grow with transfer initialization
+                self._grow_with_transfer_init(adapters, current_latent, transfer_potential)
+                self.steps_since_last_birth = 0
+                return "neurogenesis_triggered"
+                
+            else:
+                # Check for Negative Transfer interference zone (0.0 < transfer_potential < 0.15)
+                # Note: standard neurogenesis runs, but we suppress the closest pathway to prevent interference
+                is_suppressed = False
+                if 0.0 < transfer_potential < 0.15:
+                    self._apply_interference_suppression(adapters, current_latent, duration_steps=20)
+                    is_suppressed = True
+                
+                # Standard zero-init neurogenesis
+                self._standard_neurogenesis(adapters, ne_surprise.item())
+                self.steps_since_last_birth = 0
+                return "neurogenesis_triggered"
 
         return "idle"
+
+    def _find_closest_target(self, adapters: List[nn.Module], current_latent: torch.Tensor) -> Optional[nn.Module]:
+        if not adapters or current_latent is None:
+            return None
+        best_target = None
+        best_sim = -2.0
+        latent_vec = current_latent.mean(dim=0)
+        if latent_vec.dim() > 1:
+            latent_vec = latent_vec.mean(dim=0)
+        
+        for adapter in adapters:
+            target = adapter
+            if hasattr(adapter, "adapter"):
+                target = getattr(adapter, "adapter")
+            if hasattr(target, "consolidated_representation"):
+                rep = target.consolidated_representation
+                rep_aligned = rep.to(device=latent_vec.device, dtype=latent_vec.dtype)
+                if rep_aligned.norm() > 0 and latent_vec.norm() > 0:
+                    similarity = F.cosine_similarity(
+                        rep_aligned.unsqueeze(0),
+                        latent_vec.unsqueeze(0)
+                    ).item()
+                    if similarity > best_sim:
+                        best_sim = similarity
+                        best_target = target
+        return best_target
+
+    def _bridge_to_existing_pathway(self, adapters: List[nn.Module], current_latent: torch.Tensor, transfer_potential: float):
+        closest_target = self._find_closest_target(adapters, current_latent)
+        for adapter in adapters:
+            target = adapter
+            if hasattr(adapter, "adapter"):
+                target = getattr(adapter, "adapter")
+                
+            if hasattr(target, "add_dendritic_branch"):
+                new_idx = target.add_dendritic_branch()
+                
+                # Copy closest pathway weights directly
+                if closest_target and len(closest_target.branches) > 0:
+                    src_idx = len(closest_target.branches) - 1
+                    target.branches[new_idx].weight.data.copy_(closest_target.branches[src_idx].weight.data)
+                    print(f"    [Instant Adapter] Bridged {target.name} branch {new_idx} to closest pathway {closest_target.name}")
+                
+                # Set consolidation score to 1.0 (permanent immediately)
+                target.branch_states[f"state_{new_idx}"].data[2] = 1.0
+                self._register_neuron_state(target, new_idx, 1.0)
+
+    def _grow_with_transfer_init(self, adapters: List[nn.Module], current_latent: torch.Tensor, transfer_potential: float):
+        closest_target = self._find_closest_target(adapters, current_latent)
+        for adapter in adapters:
+            target = adapter
+            if hasattr(adapter, "adapter"):
+                target = getattr(adapter, "adapter")
+                
+            if hasattr(target, "add_dendritic_branch"):
+                new_idx = target.add_dendritic_branch()
+                
+                # Initialize new branch weights scaled by similarity
+                if closest_target and len(closest_target.branches) > 0:
+                    src_idx = len(closest_target.branches) - 1
+                    target.branches[new_idx].weight.data.copy_(
+                        closest_target.branches[src_idx].weight.data * transfer_potential
+                    )
+                    print(f"    [Average Learner] Init {target.name} branch {new_idx} from {closest_target.name} scaled by {transfer_potential:.2f}")
+                
+                # Initialize consolidation score to 0.5 (semi-consolidated)
+                target.branch_states[f"state_{new_idx}"].data[2] = 0.5
+                self._register_neuron_state(target, new_idx, 0.5)
+
+    def _standard_neurogenesis(self, adapters: List[nn.Module], surprise: float):
+        for adapter in adapters:
+            target = adapter
+            if hasattr(adapter, "adapter"):
+                target = getattr(adapter, "adapter")
+                
+            if hasattr(target, "add_dendritic_branch"):
+                new_idx = target.add_dendritic_branch()
+                # Zero initialized standard branch (starts with consolidation_score = 0.0)
+                target.branch_states[f"state_{new_idx}"].data[2] = 0.0
+                self._register_neuron_state(target, new_idx, surprise)
+                print(f"    [Slow Adapter] Spawned standard zero-init branch {new_idx} on {target.name}")
+
+    def _apply_interference_suppression(self, adapters: List[nn.Module], current_latent: torch.Tensor, duration_steps: int = 20):
+        closest_target = self._find_closest_target(adapters, current_latent)
+        if closest_target and len(closest_target.branches) > 0:
+            branch_idx = len(closest_target.branches) - 1
+            state = closest_target.branch_states[f"state_{branch_idx}"]
+            state.data[3] = 0.0  # Temporarily suppress active_flag to 0.0
+            
+            target_id = f"{id(closest_target)}_branch_{branch_idx}"
+            self.suppressed_adapters[target_id] = duration_steps
+            self.suppressed_adapters_refs[target_id] = (closest_target, branch_idx)
+            print(
+                f"    [Negative Transfer] Suppressing similar pathway '{closest_target.name}' "
+                f"branch {branch_idx} for {duration_steps} steps to prevent interference."
+            )
 
     def _register_neuron_state(self, adapter: nn.Module, idx: int, surprise: float):
         neuron_id = f"{id(adapter)}_branch_{idx}"
