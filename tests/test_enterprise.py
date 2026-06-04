@@ -124,6 +124,7 @@ def test_fault_tolerant_bypass() -> None:
 
 def test_redis_mock_state_store() -> None:
     """Verify PyTorch tensor serialization and deserialization used in our RedisStateStore."""
+    pytest.importorskip("safetensors")
     tensor = torch.randn(4, 8)
     
     # 1. Test binary serialization / deserialization loop

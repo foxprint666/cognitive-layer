@@ -29,7 +29,7 @@ def test_extended_dendritic_module_adapter_flow():
     x = torch.randn(2, 8)
     context = torch.randn(2, 4)
     
-    adapter = ExtendedDendriticModuleAdapter(feedforward_dim=8, context_dim=4, initial_branches=1)
+    adapter = ExtendedDendriticModuleAdapter(8, 4, initial_branches=1)
     
     # 1. Verify initial branch exists
     assert len(adapter.branches) == 1
@@ -71,7 +71,7 @@ def test_neurogenesis_manager_trigger_and_cooldown():
         metacognitive_monitor=None
     )
     
-    adapter = ExtendedDendriticModuleAdapter(feedforward_dim=8, context_dim=4, initial_branches=1)
+    adapter = ExtendedDendriticModuleAdapter(8, 4, initial_branches=1)
     adapters = [adapter]
     
     # 1. Under low surprise, status should be idle
@@ -120,7 +120,7 @@ def test_neurogenesis_astrocyte_regulation():
 
 def test_dynamic_optimizer_parameter_update():
     """Verify that dynamic register/deregister parameters update the live optimizer successfully."""
-    adapter = ExtendedDendriticModuleAdapter(feedforward_dim=8, context_dim=4, initial_branches=1)
+    adapter = ExtendedDendriticModuleAdapter(8, 4, initial_branches=1)
     optimizer = optim.Adam(adapter.parameters(), lr=0.01)
     
     # Initial parameters in optimizer
@@ -147,7 +147,7 @@ def test_neurogenesis_consolidation_offline_sleep():
         def __init__(self):
             super().__init__()
             self.linear = nn.Linear(4, 4)
-            self.adapter = ExtendedDendriticModuleAdapter(feedforward_dim=4, context_dim=2, initial_branches=1)
+            self.adapter = ExtendedDendriticModuleAdapter(4, 2, initial_branches=1)
             
         def forward(self, x, context):
             base_out = self.linear(x)

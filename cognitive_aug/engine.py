@@ -23,6 +23,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .exceptions import RegistryError, DeviceMismatchError
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +48,7 @@ class ModuleRegistry:
     def get(self, name: str) -> Any:
         """Retrieve a registered ModuleAdapter by name."""
         if name not in self._adapters:
-            raise KeyError(f"Module '{name}' is not registered.")
+            raise RegistryError(f"Module '{name}' is not registered.")
         return self._adapters[name]
 
     def list_names(self) -> List[str]:
@@ -198,9 +200,12 @@ class ModuleAdapter(nn.Module):
 
                 if self.projection is not None:
                     module_output_dtype = latent.dtype
-                    latent = latent.to(dtype=self.projection.weight.dtype)
-                    latent = self.projection(latent)
-                    latent = latent.to(dtype=module_output_dtype)
+                    try:
+                        latent = latent.to(dtype=self.projection.weight.dtype, device=self.projection.weight.device)
+                        latent = self.projection(latent)
+                        latent = latent.to(dtype=module_output_dtype)
+                    except Exception as e:
+                        raise DeviceMismatchError(f"Device/Dtype mismatch during latent projection: {e}")
 
                 self.data_flow.update_buffer(self.name, latent)
             except Exception as e:
@@ -421,13 +426,16 @@ class GlobalWorkspace(nn.Module):
         names = list(latent_states.keys())
         device = next(self.parameters()).device
 
-        latents_stacked = torch.stack(
-            [global_pool_latent(latent_states[n]).to(device) for n in names], dim=1
-        )   # [B, num_modules, latent_dim]
+        try:
+            latents_stacked = torch.stack(
+                [global_pool_latent(latent_states[n]).to(device) for n in names], dim=1
+            )   # [B, num_modules, latent_dim]
 
-        keys_stacked = torch.stack(
-            [global_pool_latent(keys[n]).to(device) for n in names], dim=1
-        )   # [B, num_modules, key_dim]
+            keys_stacked = torch.stack(
+                [global_pool_latent(keys[n]).to(device) for n in names], dim=1
+            )   # [B, num_modules, key_dim]
+        except Exception as e:
+            raise DeviceMismatchError(f"Failed to stack latents/keys in workspace: {e}")
 
         batch_size = latents_stacked.shape[0]
         query = (
@@ -704,7 +712,7 @@ class CognitiveAugEngine:
                     latent = self.data_flow.get_buffer(adapter.name)
                     latent_states[adapter.name] = latent
                     keys[adapter.name] = adapter.get_key(latent)
-                except KeyError:
+                except RegistryError:
                     logger.warning(
                         f"Module '{adapter.name}' has not run a forward pass this step. "
                         "Falling back to zero latent vector."

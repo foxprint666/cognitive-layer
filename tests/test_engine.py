@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from cognitive_aug import CognitiveAugEngine, ModuleAdapter
 from cognitive_aug.engine import ModuleRegistry, DataFlowManager
+from cognitive_aug.exceptions import RegistryError
 
 
 class ToyModule(nn.Module):
@@ -29,7 +30,7 @@ def test_registry_basic_operations():
     assert "test_mod" in registry.list_names()
     assert registry.get("test_mod") == adapter
 
-    with pytest.raises(KeyError):
+    with pytest.raises(RegistryError):
         registry.get("invalid_name")
 
     registry.clear()
@@ -46,11 +47,11 @@ def test_data_flow_manager():
     with pytest.raises(TypeError):
         dfm.update_buffer("mod_b", [1, 2, 3])  # type: ignore
 
-    with pytest.raises(KeyError):
+    with pytest.raises(RegistryError):
         dfm.get_buffer("non_existent")
 
     dfm.clear_buffers()
-    with pytest.raises(KeyError):
+    with pytest.raises(RegistryError):
         dfm.get_buffer("mod_a")
 
 

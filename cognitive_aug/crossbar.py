@@ -195,9 +195,12 @@ class CrossbarModuleAdapter(ModuleAdapter):
             from .salience import global_pool_latent
             latent = global_pool_latent(latent)
 
-            # Optional projection layer
+            # Optional projection layer with robust dtype alignment
             if self.projection is not None:
+                module_output_dtype = latent.dtype
+                latent = latent.to(dtype=self.projection.weight.dtype)
                 latent = self.projection(latent)
+                latent = latent.to(dtype=module_output_dtype)
 
             # Write raw latent directly into designated crossbar slot
             if self.engine is not None and self.engine.crossbar is not None:

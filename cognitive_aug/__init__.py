@@ -133,6 +133,7 @@ from .neurogenesis import (
     dynamic_deregister_parameters,
     NeurogenesisGradientSanitizerHook,
     NeurogenesisAstrocyteManager,
+    TransferSalienceCalculator,
 )
 
 __all__ = [
@@ -204,6 +205,7 @@ __all__ = [
     "dynamic_deregister_parameters",
     "NeurogenesisGradientSanitizerHook",
     "NeurogenesisAstrocyteManager",
+    "TransferSalienceCalculator",
 ]
 
 
