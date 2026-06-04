@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cognitive-aug"
-version = "0.2.9"
+version = "0.3.0"
 description = "A Global Workspace Theory (GWT) meta-learning layer for open weights LLMs."
 readme = "README.md"
 requires-python = ">=3.10"

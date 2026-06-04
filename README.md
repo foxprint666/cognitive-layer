@@ -59,6 +59,7 @@ graph TD
 7. **Cross-Modal Cognitive Crossbar (Phase v0.7)**: Routes information concurrently across multiple parallel slots using multi-slot attention routing.
 8. **Enterprise Scalability & Caching (Phase v0.8)**: Offloads heavy SWS consolidation loops asynchronously and serializes/deserializes PyTorch activation tensors to/from Redis Enterprise.
 9. **Autonomous Computational Neurogenesis (Phase v0.9)**: Dynamically spawns new parallel dendritic branches in response to high unexpected uncertainty, protected by somatic calcium regulators and offline pruning consolidation.
+10. **Positive/Negative Transfer Learning (Phase v1.0)**: Employs a `TransferSalienceCalculator` to measure cross-domain overlap, enabling Fast (Instant Adapter), Hybrid (Average Learner), and Slow (from scratch) learning modes while suppressing negative transfer interference.
 
 ---
 
@@ -642,6 +643,35 @@ class NeurogenesisConsolidationEngine:
     def __init__(self, model: nn.Module, replay_buffer: Any, threshold_perm: float = 0.4) -> None: ...
     def execute_sleep_cycle(self, optimizer: torch.optim.Optimizer, steps: int = 100) -> None: ...
 ```
+
+---
+
+### Phase v1.0: Positive/Negative Transfer Learning
+
+Employs transfer learning principles to accelerate knowledge consolidation when novel domains overlap with existing dense pathways, while suppressing negative transfer interference from overlapping but conflicting paradigms.
+
+#### Class: `TransferSalienceCalculator`
+Calculates cross-domain cosine similarity between the existing active dendritic pathway gating weights and the new domain latent state.
+
+```python
+class TransferSalienceCalculator:
+    def calculate_transfer_potential(self, existing_adapters: List[nn.Module], new_domain_latent: torch.Tensor) -> float: ...
+    """
+    Returns the maximum transfer potential [0.0, 1.0].
+    """
+```
+
+**Learning Modes based on Transfer Potential:**
+*   **Instant Adapter (>0.7):** Bridges existing pathways; finds shortcuts through existing structure instead of growing from scratch. Adapts in hours.
+*   **Average Learner (0.3 - 0.7):** Grows a new pathway but initializes its parameters by copying the closest existing pathway, accelerating consolidation.
+*   **Expert Beginner (0.0 - 0.15):** High interference probability (negative transfer). The new domain is similar enough to trigger old patterns but requires a different response. The system temporarily suppresses the interfering pathway while growing a new one.
+*   **Slow Adapter (0.15 - 0.3):** Standard zero-initialized neurogenesis. Takes longer to consolidate.
+
+#### Research Hypothesis Simulation
+```python
+Hypothesis: cognitive-aug instances with higher cross-domain pathway density will demonstrate faster neurogenesis consolidation on novel domains.
+```
+
 
 #### Reproducible End-to-End Demonstration Guide
 
