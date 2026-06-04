@@ -16,6 +16,7 @@ BroadcastEngine     : Weighted-sum broadcaster (single or multi-slot workspace).
 GlobalWorkspace     : Top-level GWT module coordinating selection + broadcast.
 CognitiveAugEngine  : Main orchestrator tying all components together.
 """
+
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # Registry & Data Flow
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class ModuleRegistry:
     """Registry for managing brain-inspired cognitive modules and their adapters."""
@@ -68,14 +70,17 @@ class DataFlowManager:
     """
     Manages communication buffers, dynamic latent spaces, and shapes of all
     registered modules. Ensures high-performance tensor transfers and routing.
-    
+
     Delegates dynamically to a GWT StateStore (local or distributed Redis) to
     support horizontally scaled application pods safely.
     """
 
     def __init__(self, state_store: Optional[Any] = None) -> None:
         from .state import InMemoryStateStore
-        self._state_store = state_store if state_store is not None else InMemoryStateStore()
+
+        self._state_store = (
+            state_store if state_store is not None else InMemoryStateStore()
+        )
 
     def update_buffer(self, name: str, tensor: torch.Tensor) -> None:
         """Update the latent space buffer for a specific module."""
@@ -116,6 +121,7 @@ class DataFlowManager:
 # Module Adapter
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ModuleAdapter(nn.Module):
     """
     Adapter wrapper that hooks into any PyTorch nn.Module.
@@ -154,7 +160,7 @@ class ModuleAdapter(nn.Module):
         self.data_flow = data_flow
         self.key_dim = key_dim
 
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
 
         # Optional learnable projection: raw_output_dim -> latent_dim
         self.projection: Optional[nn.Linear] = None
@@ -169,7 +175,9 @@ class ModuleAdapter(nn.Module):
         self.key_proj = nn.Linear(latent_dim, key_dim, **factory_kwargs)
 
         # Buffer storing the latest broadcasted workspace state for this module
-        self.register_buffer("last_broadcast", torch.zeros(1, latent_dim, **factory_kwargs))
+        self.register_buffer(
+            "last_broadcast", torch.zeros(1, latent_dim, **factory_kwargs)
+        )
 
         if device is not None or dtype is not None:
             self.to(device=device, dtype=dtype)
@@ -196,25 +204,32 @@ class ModuleAdapter(nn.Module):
 
                 # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
                 from .salience import global_pool_latent
+
                 latent = global_pool_latent(latent)
 
                 if self.projection is not None:
                     module_output_dtype = latent.dtype
                     try:
-                        latent = latent.to(dtype=self.projection.weight.dtype, device=self.projection.weight.device)
+                        latent = latent.to(
+                            dtype=self.projection.weight.dtype,
+                            device=self.projection.weight.device,
+                        )
                         latent = self.projection(latent)
                         latent = latent.to(dtype=module_output_dtype)
                     except Exception as e:
-                        raise DeviceMismatchError(f"Device/Dtype mismatch during latent projection: {e}")
+                        raise DeviceMismatchError(
+                            f"Device/Dtype mismatch during latent projection: {e}"
+                        )
 
                 self.data_flow.update_buffer(self.name, latent)
             except Exception as e:
                 # Graceful fallback: log the error and bypass GWT, returning base outputs unmodified
                 from .telemetry import get_telemetry_logger
+
                 get_telemetry_logger().record_error(
                     error_msg=str(e),
                     phase="ModuleAdapter Forward Hook Interception",
-                    details=f"Gracefully bypassing GWT for module '{self.name}'."
+                    details=f"Gracefully bypassing GWT for module '{self.name}'.",
                 )
             return outputs  # always return original outputs unmodified
 
@@ -248,6 +263,7 @@ class ModuleAdapter(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 # Attention Selector
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class AttentionSelector(nn.Module):
     """
@@ -303,10 +319,10 @@ class AttentionSelector(nn.Module):
         else:
             if query is None:
                 query = torch.zeros(batch_size, key_dim, device=keys.device)
-            q_proj = self.query_proj(query).unsqueeze(-1)          # [B, key_dim, 1]
-            scores = torch.matmul(keys, q_proj).squeeze(-1)        # [B, num_modules]
+            q_proj = self.query_proj(query).unsqueeze(-1)  # [B, key_dim, 1]
+            scores = torch.matmul(keys, q_proj).squeeze(-1)  # [B, num_modules]
 
-        scores = scores / (key_dim ** 0.5)
+        scores = scores / (key_dim**0.5)
         weights = F.softmax(scores, dim=-1)
 
         if self.ignition_threshold > 0.0:
@@ -323,6 +339,7 @@ class AttentionSelector(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 # Broadcast Engine
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class BroadcastEngine(nn.Module):
     """
@@ -355,12 +372,12 @@ class BroadcastEngine(nn.Module):
         Returns:
             Broadcasted workspace state [B, latent_dim].
         """
-        w = weights.unsqueeze(-1)   # [B, num_modules, 1]
+        w = weights.unsqueeze(-1)  # [B, num_modules, 1]
 
         if self.workspace_slots == 1:
             return (latents * w).sum(dim=1)
 
-        base_mix = (latents * w).sum(dim=1)     # [B, latent_dim]
+        base_mix = (latents * w).sum(dim=1)  # [B, latent_dim]
         slot_outputs = [proj(base_mix) for proj in self.slot_projs]
         return self.aggregation(torch.cat(slot_outputs, dim=-1))
 
@@ -368,6 +385,7 @@ class BroadcastEngine(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 # Global Workspace
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class GlobalWorkspace(nn.Module):
     """
@@ -429,11 +447,11 @@ class GlobalWorkspace(nn.Module):
         try:
             latents_stacked = torch.stack(
                 [global_pool_latent(latent_states[n]).to(device) for n in names], dim=1
-            )   # [B, num_modules, latent_dim]
+            )  # [B, num_modules, latent_dim]
 
             keys_stacked = torch.stack(
                 [global_pool_latent(keys[n]).to(device) for n in names], dim=1
-            )   # [B, num_modules, key_dim]
+            )  # [B, num_modules, key_dim]
         except Exception as e:
             raise DeviceMismatchError(f"Failed to stack latents/keys in workspace: {e}")
 
@@ -444,7 +462,7 @@ class GlobalWorkspace(nn.Module):
             else self.global_query.expand(batch_size, -1)
         )
 
-        weights = self.selector(keys_stacked, query)    # [B, num_modules]
+        weights = self.selector(keys_stacked, query)  # [B, num_modules]
 
         # Cache detached parameters for metacognitive neuromodulation telemetry
         self.last_weights = weights.detach()
@@ -465,6 +483,7 @@ class GlobalWorkspace(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 # Cognitive Aug Engine  (top-level orchestrator)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class CognitiveAugEngine:
     """
@@ -501,7 +520,9 @@ class CognitiveAugEngine:
         self.concept_layers[name] = layer
         layer.name = name
         layer.data_flow = self.data_flow
-        logger.info(f"Successfully attached ConceptLayer '{name}' to CognitiveAugEngine.")
+        logger.info(
+            f"Successfully attached ConceptLayer '{name}' to CognitiveAugEngine."
+        )
 
     def attach_crossbar(self, crossbar: Any) -> None:
         """Attach a CognitiveCrossbar to dynamically route cross-modal states."""
@@ -595,7 +616,9 @@ class CognitiveAugEngine:
                     name_str = layer.concept_names[i]
                     if i in interventions:
                         forced = interventions[i]
-                        lines.append(f"  - [{name_str}: {bar} {val:.2f} (OVERRIDDEN -> {forced:.1f})]")
+                        lines.append(
+                            f"  - [{name_str}: {bar} {val:.2f} (OVERRIDDEN -> {forced:.1f})]"
+                        )
                     else:
                         lines.append(f"  - [{name_str}: {bar} {val:.2f}]")
             lines.append("-" * 60)
@@ -606,7 +629,7 @@ class CognitiveAugEngine:
             weights = self.crossbar.last_weights
             if weights.dim() == 3:
                 weights = weights.mean(dim=0)
-            
+
             for i in range(self.crossbar.num_slots):
                 for j in range(self.crossbar.num_slots):
                     if i != j:
@@ -654,7 +677,7 @@ class CognitiveAugEngine:
         """Attach a GlobalWorkspace to orchestrate attention and broadcasting."""
         self.workspace = workspace
         logger.info("Successfully attached workspace to CognitiveAugEngine.")
-        
+
         # Dynamically align registered adapters' key_proj if their key_dim doesn't match the workspace's key_dim
         if hasattr(workspace, "key_dim"):
             target_key_dim = workspace.key_dim
@@ -666,8 +689,14 @@ class CognitiveAugEngine:
                     )
                     adapter.key_dim = target_key_dim
                     # Recreate key_proj linear layer with new key_dim
-                    device = next(adapter.parameters()).device if list(adapter.parameters()) else torch.device("cpu")
-                    adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(device)
+                    device = (
+                        next(adapter.parameters()).device
+                        if list(adapter.parameters())
+                        else torch.device("cpu")
+                    )
+                    adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(
+                        device
+                    )
 
     def step(self) -> torch.Tensor:
         """
@@ -694,15 +723,28 @@ class CognitiveAugEngine:
             if hasattr(self.workspace, "key_dim"):
                 target_key_dim = self.workspace.key_dim
                 for adapter in adapters:
-                    if hasattr(adapter, "key_dim") and adapter.key_dim != target_key_dim:
+                    if (
+                        hasattr(adapter, "key_dim")
+                        and adapter.key_dim != target_key_dim
+                    ):
                         logger.info(
                             f"Dynamic alignment: Re-projecting key space for module '{adapter.name}' "
                             f"from {adapter.key_dim} to {target_key_dim} to match the workspace."
                         )
                         adapter.key_dim = target_key_dim
-                        device = next(adapter.parameters()).device if list(adapter.parameters()) else torch.device("cpu")
-                        dtype = next(adapter.parameters()).dtype if list(adapter.parameters()) else torch.float32
-                        adapter.key_proj = nn.Linear(adapter.latent_dim, target_key_dim).to(device=device, dtype=dtype)
+                        device = (
+                            next(adapter.parameters()).device
+                            if list(adapter.parameters())
+                            else torch.device("cpu")
+                        )
+                        dtype = (
+                            next(adapter.parameters()).dtype
+                            if list(adapter.parameters())
+                            else torch.float32
+                        )
+                        adapter.key_proj = nn.Linear(
+                            adapter.latent_dim, target_key_dim
+                        ).to(device=device, dtype=dtype)
 
             latent_states: Dict[str, torch.Tensor] = {}
             keys: Dict[str, torch.Tensor] = {}
@@ -741,7 +783,7 @@ class CognitiveAugEngine:
                     if hasattr(adapter, "slot_idx"):
                         adapter.engine = self
                 # Vectorized parallel routing
-                routed_latents = self.crossbar() # [B, num_slots, slot_dim]
+                routed_latents = self.crossbar()  # [B, num_slots, slot_dim]
                 # Distribute routed slot context back to their adapters as waking GWT context
                 for adapter in adapters:
                     if hasattr(adapter, "slot_idx"):
@@ -759,16 +801,24 @@ class CognitiveAugEngine:
             # ── Enterprise Telemetry Logging ──
             try:
                 from .telemetry import get_telemetry_logger
+
                 modules_telemetry = {}
                 for adapter in adapters:
                     gate_pct = 0.0
-                    if hasattr(adapter, "dendrite_gate") and adapter.dendrite_gate is not None:
-                        gate_pct = adapter.dendrite_gate.get_status().get("active_pct", 0.0)
-                    
+                    if (
+                        hasattr(adapter, "dendrite_gate")
+                        and adapter.dendrite_gate is not None
+                    ):
+                        gate_pct = adapter.dendrite_gate.get_status().get(
+                            "active_pct", 0.0
+                        )
+
                     scale = 1.0
                     grad_status = "Stable"
                     if self.glial_manager is not None:
-                        scale = self.glial_manager._plasticity_scales.get(adapter.name, 1.0)
+                        scale = self.glial_manager._plasticity_scales.get(
+                            adapter.name, 1.0
+                        )
                         hook = self.glial_manager._sanitizer_hooks.get(adapter.name)
                         if hook is not None:
                             grad_status = hook.grad_status
@@ -776,16 +826,32 @@ class CognitiveAugEngine:
                     modules_telemetry[adapter.name] = {
                         "dendritic_active_pct": gate_pct,
                         "plasticity_scale": scale,
-                        "grad_status": grad_status
+                        "grad_status": grad_status,
                     }
 
                 crossbar_data = None
                 if self.crossbar is not None and self.crossbar.last_weights is not None:
-                    crossbar_data = {"mean_routing_weight": float(self.crossbar.last_weights.mean().item())}
+                    crossbar_data = {
+                        "mean_routing_weight": float(
+                            self.crossbar.last_weights.mean().item()
+                        )
+                    }
 
-                ne = getattr(self.neuromodulator, "ne", 0.0) if self.neuromodulator is not None else 0.0
-                ach = getattr(self.neuromodulator, "ach", 0.0) if self.neuromodulator is not None else 0.0
-                thresh = getattr(self.workspace.selector, "ignition_threshold", 0.0) if hasattr(self.workspace, "selector") else 0.0
+                ne = (
+                    getattr(self.neuromodulator, "ne", 0.0)
+                    if self.neuromodulator is not None
+                    else 0.0
+                )
+                ach = (
+                    getattr(self.neuromodulator, "ach", 0.0)
+                    if self.neuromodulator is not None
+                    else 0.0
+                )
+                thresh = (
+                    getattr(self.workspace.selector, "ignition_threshold", 0.0)
+                    if hasattr(self.workspace, "selector")
+                    else 0.0
+                )
 
                 get_telemetry_logger().record_step(
                     step_idx=self._step_counter,
@@ -793,7 +859,7 @@ class CognitiveAugEngine:
                     ach=ach,
                     ignition_threshold=thresh,
                     modules_telemetry=modules_telemetry,
-                    crossbar_weights=crossbar_data
+                    crossbar_weights=crossbar_data,
                 )
                 self._step_counter += 1
             except Exception as tel_ex:
@@ -804,12 +870,13 @@ class CognitiveAugEngine:
         except Exception as e:
             # ── GWT Step Fail-Safe Fallback Bypass ──
             from .telemetry import get_telemetry_logger
+
             get_telemetry_logger().record_error(
                 error_msg=str(e),
                 phase="GWT step execution",
-                details="Graceful fail-safe fallback bypass triggered."
+                details="Graceful fail-safe fallback bypass triggered.",
             )
-            
+
             # Construct a safe zero-filled broadcast fallback tensor
             batch_size = 1
             try:
@@ -818,8 +885,12 @@ class CognitiveAugEngine:
                     break
             except Exception:
                 pass
-            
-            latent_dim = getattr(self.workspace, "latent_dim", 4) if self.workspace is not None else 4
+
+            latent_dim = (
+                getattr(self.workspace, "latent_dim", 4)
+                if self.workspace is not None
+                else 4
+            )
             device = torch.device("cpu")
             if self.workspace is not None and hasattr(self.workspace, "parameters"):
                 try:
@@ -829,20 +900,22 @@ class CognitiveAugEngine:
                 except Exception:
                     pass
             fallback_broadcast = torch.zeros(batch_size, latent_dim, device=device)
-            
+
             # Deliver broadcast back to adapters to guarantee forward pathway continuity
             try:
                 for adapter in self.registry.list_adapters():
                     adapter.receive_broadcast(fallback_broadcast)
             except Exception:
                 pass
-                
+
             return fallback_broadcast
 
     def attach_replay_buffer(self, replay_buffer: Any) -> None:
         """Attach an episodic replay buffer to record waking transitions."""
         self.replay_buffer = replay_buffer
-        logger.info("Successfully attached CognitiveReplayBuffer to CognitiveAugEngine.")
+        logger.info(
+            "Successfully attached CognitiveReplayBuffer to CognitiveAugEngine."
+        )
 
     def record_transition(self) -> None:
         """
@@ -860,7 +933,9 @@ class CognitiveAugEngine:
         for adapter in adapters:
             try:
                 # Retrieve detached waking latent outputs from buffer
-                latent_states[adapter.name] = self.data_flow.get_buffer(adapter.name).detach()
+                latent_states[adapter.name] = self.data_flow.get_buffer(
+                    adapter.name
+                ).detach()
             except KeyError:
                 continue
 
@@ -892,17 +967,17 @@ class CognitiveAugEngine:
     ) -> Dict[str, Any]:
         """
         Pauses online processing and executes an offline sleep and memory consolidation cycle.
-        
+
         Replays high-salience experiences to stabilize GWT attention routing weights,
         applies structural pruning to under-utilized dendritic branches (permanently
         severing parameters and backprop gradients), and flushes the replay buffer.
-        
+
         Args:
             steps             : Number of slow-wave sleep steps.
             learning_rate     : Learning rate for consolidation.
             pruning_threshold : Average activation threshold below which dendritic branches are pruned.
             batch_size        : Replay mini-batch size.
-            
+
         Returns:
             Telemetry dictionary summarizing replayed items, pruned branches, and loss delta.
         """
@@ -922,7 +997,9 @@ class CognitiveAugEngine:
         for adapter in self.registry.list_adapters():
             if hasattr(adapter, "dendrite_gate") and adapter.dendrite_gate is not None:
                 if adapter.dendrite_gate.latest_branch_activations is not None:
-                    waking_activations[adapter.name] = adapter.dendrite_gate.latest_branch_activations.clone()
+                    waking_activations[adapter.name] = (
+                        adapter.dendrite_gate.latest_branch_activations.clone()
+                    )
 
         # 1. Initialize offline ConsolidationEngine and execute SWS cycles
         consolidator = ConsolidationEngine(self, self.replay_buffer)

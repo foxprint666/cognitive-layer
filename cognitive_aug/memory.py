@@ -7,6 +7,7 @@ DecayWorkingMemory maintains a stateful buffer between GWT steps.
 Non-ignited slots decay in-place; ignited slots are overwritten by the
 new winner. Returns a blended context combining history and new winner.
 """
+
 import logging
 
 import torch
@@ -67,10 +68,7 @@ class DecayWorkingMemory(nn.Module):
         batch_size = new_winner.shape[0]
 
         # Lazy init / resize when batch size or device changes
-        if (
-            not self.has_initialized
-            or self.workspace_state.shape[0] != batch_size
-        ):
+        if not self.has_initialized or self.workspace_state.shape[0] != batch_size:
             self.workspace_state = torch.zeros(
                 batch_size,
                 self.latent_dim,

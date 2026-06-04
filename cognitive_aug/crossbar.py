@@ -9,7 +9,7 @@ an optimized multi-slot attention routing crossbar.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class CognitiveCrossbar(nn.Module):
     """
     CognitiveCrossbar Layer.
-    
+
     A parallel distributed routing bus that implements an optimized multi-slot
     attention routing crossbar to enable all-to-all cross-modal dynamic binding.
     """
@@ -90,17 +90,19 @@ class CognitiveCrossbar(nn.Module):
     def forward(self, x: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Vectorized Parallel Routing.
-        
+
         Args:
             x : Optional [B, num_slots, slot_dim] stacked source latents.
                 If None, uses the internally stacked latents written by adapters.
-                
+
         Returns:
             [B, num_slots, slot_dim] routed crossbar representations.
         """
         if x is None:
             if self._stacked_latents is None:
-                raise ValueError("No latents written to CognitiveCrossbar. Run forward pass first.")
+                raise ValueError(
+                    "No latents written to CognitiveCrossbar. Run forward pass first."
+                )
             x = self._stacked_latents
 
         batch_size, num_slots, slot_dim = x.shape
@@ -112,7 +114,7 @@ class CognitiveCrossbar(nn.Module):
 
         # 2. All-to-all cross-attention scoring
         # scores shape: [B, num_slots, num_slots]
-        scores = torch.matmul(Q, K.transpose(-2, -1)) / (slot_dim ** 0.5)
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / (slot_dim**0.5)
         weights = F.softmax(scores, dim=-1)
 
         # 3. Dynamic scaling of binding weights driven by global neuromodulators (if attached)
@@ -139,7 +141,7 @@ class CognitiveCrossbar(nn.Module):
 class CrossbarModuleAdapter(ModuleAdapter):
     """
     CrossbarModuleAdapter.
-    
+
     Extends ModuleAdapter to support writing to and reading from a dedicated
     slot line on the CognitiveCrossbar.
     """
@@ -193,6 +195,7 @@ class CrossbarModuleAdapter(ModuleAdapter):
 
             # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
             from .salience import global_pool_latent
+
             latent = global_pool_latent(latent)
 
             # Optional projection layer with robust dtype alignment
@@ -210,4 +213,6 @@ class CrossbarModuleAdapter(ModuleAdapter):
             return outputs
 
         self._hook_handle = self.module.register_forward_hook(hook_fn)
-        logger.debug(f"Crossbar forward hook successfully registered on module '{self.name}'.")
+        logger.debug(
+            f"Crossbar forward hook successfully registered on module '{self.name}'."
+        )

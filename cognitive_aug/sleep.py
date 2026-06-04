@@ -9,14 +9,13 @@ and dynamically pruning under-utilized dendritic branches.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .dendrite import ActiveDendriteGate, DendriticModuleAdapter
-from .engine import DataFlowManager
+from .dendrite import ActiveDendriteGate
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +24,11 @@ logger = logging.getLogger(__name__)
 # 1. CognitiveReplayBuffer
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CognitiveReplayBuffer:
     """
     Episodic cache storing GWT waking transition traces.
-    
+
     Delegates dynamically to a ReplayBufferStore (local in-memory or distributed Redis)
     to prevent local process RAM bloating and support multi-pod shared experiences.
     """
@@ -40,6 +40,7 @@ class CognitiveReplayBuffer:
             store    : Optional ReplayBufferStore backend instance.
         """
         from .state import InMemoryReplayBufferStore
+
         self.max_size = max_size
         self.store = store if store is not None else InMemoryReplayBufferStore(max_size)
 
@@ -58,7 +59,7 @@ class CognitiveReplayBuffer:
     ) -> None:
         """
         Inserts a detached transition trace into the episodic store.
-        
+
         Args:
             latent_states : Dictionary of `{module_name: latent_tensor}`.
             context       : Global GWT broadcast tensor [B, latent_dim].
@@ -91,10 +92,11 @@ class CognitiveReplayBuffer:
 # 2. ConsolidationEngine
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ConsolidationEngine:
     """
     Offline Sleep Consolidation Engine.
-    
+
     Pauses online inference/data streams and enters a simulated 'Slow-Wave Sleep'
     phase to reinforce GWT workspace attention mappings and active dendritic pathways.
     """
@@ -116,15 +118,15 @@ class ConsolidationEngine:
     ) -> Dict[str, Any]:
         """
         Executes N steps of Slow-Wave Sleep.
-        
+
         Optimizes workspace and dendritic parameters using localized reconstruction
         and GWT routing consistency loss.
-        
+
         Args:
             steps         : Number of optimizer cycles.
             learning_rate : Learning rate for local parameter optimization.
             batch_size    : Replay mini-batch size.
-            
+
         Returns:
             Telemetry dictionary detailing replayed items and loss improvements.
         """
@@ -160,7 +162,7 @@ class ConsolidationEngine:
 
         # Setup local sleep cycle optimizer
         optimizer = torch.optim.Adam(params, lr=learning_rate)
-        
+
         initial_loss = 0.0
         final_loss = 0.0
         total_replayed = 0
@@ -192,7 +194,7 @@ class ConsolidationEngine:
                 # A. Workspace Replay: Compute replayed Global Workspace state
                 if self.engine.workspace is not None:
                     replayed_broadcast = self.engine.workspace(device_latents, keys)
-                    
+
                     # Workspace Reconstruction Loss (align replayed state with waking state)
                     loss_workspace = F.mse_loss(replayed_broadcast, target_context)
                     step_loss = step_loss + loss_workspace
@@ -201,10 +203,15 @@ class ConsolidationEngine:
                     # Feed waking features through Dendritic Gates with the replayed context
                     for name, latent in device_latents.items():
                         adapter = self.engine.registry.get(name)
-                        if hasattr(adapter, "dendrite_gate") and adapter.dendrite_gate is not None:
+                        if (
+                            hasattr(adapter, "dendrite_gate")
+                            and adapter.dendrite_gate is not None
+                        ):
                             # Re-run dendritic pre-processing with replayed global workspace broadcast
-                            gated_output = adapter.dendrite_gate(latent, replayed_broadcast)
-                            
+                            gated_output = adapter.dendrite_gate(
+                                latent, replayed_broadcast
+                            )
+
                             # Stability Loss: Compare replayed gated state to waking gated state (target)
                             loss_dendrite = F.mse_loss(gated_output, latent)
                             step_loss = step_loss + loss_dendrite
@@ -239,6 +246,7 @@ class ConsolidationEngine:
 # 3. DendriticPruning (Synaptic Homeostasis)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def prune_dendrites(
     model_or_engine: Any,
     pruning_threshold: float = 0.05,
@@ -247,12 +255,12 @@ def prune_dendrites(
 ) -> int:
     """
     Scans the model/engine for ActiveDendriteGate layers and prunes weak branches.
-    
+
     If a dendritic branch's average activation score across the waking period falls
     below pruning_threshold, its context projection weights and biases are modified.
     Pruning masks and backward hooks are updated under torch.no_grad() to permanently
     sever the parameters and prevent gradients from recalculating through them.
-    
+
     Args:
         model_or_engine   : The CognitiveAugEngine or PyTorch nn.Module.
         pruning_threshold : Activation threshold below which branches are pruned.
@@ -261,12 +269,12 @@ def prune_dendrites(
         waking_activations: Optional dict of cached waking activations. If provided,
                             used instead of the gate's latest activations (which
                             may have been overwritten during sleep replay).
-                            
+
     Returns:
         Total number of dendritic branches pruned/decayed.
     """
     gates = []
-    
+
     # Extract gates from engine or module
     if hasattr(model_or_engine, "registry"):
         adapters = model_or_engine.registry.list_adapters()
@@ -285,7 +293,7 @@ def prune_dendrites(
         activations = None
         if waking_activations is not None and name is not None:
             activations = waking_activations.get(name)
-            
+
         if activations is None:
             activations = gate.latest_branch_activations
 
@@ -306,18 +314,25 @@ def prune_dendrites(
                     # Apply hard pruning or soft decay to raw tensors
                     if soft_decay == 0.0:
                         import torch.nn.utils.prune as prune
+
                         # Update the persistent mask buffer
                         gate.pruning_mask[start_idx:end_idx, :] = 0.0
-                        prune.custom_from_mask(gate.context_proj, name="weight", mask=gate.pruning_mask)
-                        
+                        prune.custom_from_mask(
+                            gate.context_proj, name="weight", mask=gate.pruning_mask
+                        )
+
                         if gate.context_proj.bias is not None:
                             gate.bias_pruning_mask[start_idx:end_idx] = 0.0
-                            prune.custom_from_mask(gate.context_proj, name="bias", mask=gate.bias_pruning_mask)
+                            prune.custom_from_mask(
+                                gate.context_proj,
+                                name="bias",
+                                mask=gate.bias_pruning_mask,
+                            )
                     else:
                         # Soft Decay: multiply parameters by decay rate
                         gate.context_proj.weight[start_idx:end_idx, :] *= soft_decay
                         gate.pruning_mask[start_idx:end_idx, :] *= soft_decay
-                        
+
                         if gate.context_proj.bias is not None:
                             gate.context_proj.bias[start_idx:end_idx] *= soft_decay
                             gate.bias_pruning_mask[start_idx:end_idx] *= soft_decay

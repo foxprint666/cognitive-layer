@@ -7,6 +7,7 @@ from cognitive_aug import (
     MetacognitiveMonitor,
 )
 
+
 # 1. Define a standard PyTorch module
 class VisionEncoder(nn.Module):
     def __init__(self) -> None:
@@ -18,6 +19,7 @@ class VisionEncoder(nn.Module):
         out = torch.relu(self.conv(x))
         out = out.view(out.size(0), -1)
         return self.fc(out)
+
 
 # 2. Instantiate modules and engine
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,12 +35,14 @@ adapter = DendriticModuleAdapter(
     data_flow=engine.data_flow,
     num_branches=4,
     spike_type="nmda-threshold",
-    threshold=0.4
+    threshold=0.4,
 )
 engine.registry.register("vision_encoder", adapter)
 
 # 4. Attach Workspace and Neuromodulator
-workspace = GlobalWorkspace(latent_dim=16, key_dim=32, ignition_threshold=0.3).to(device)
+workspace = GlobalWorkspace(latent_dim=16, key_dim=32, ignition_threshold=0.3).to(
+    device
+)
 engine.attach_workspace(workspace)
 
 monitor = MetacognitiveMonitor(alpha_ne=0.2, alpha_ach=0.2)

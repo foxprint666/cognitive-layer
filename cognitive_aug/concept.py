@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ConceptInterventionEngine:
     """
     Concept Intervention Engine (Causal Override).
-    
+
     Manages explicit causal overrides of concept activations. Allows programmatic or
     human-in-the-loop intervention to forcefully clamp concept values.
     """
@@ -33,7 +33,9 @@ class ConceptInterventionEngine:
     def set_intervention(self, concept_idx: int, forced_value: float) -> None:
         """Registers a causal override for a specific concept index."""
         self.interventions[concept_idx] = float(forced_value)
-        logger.debug(f"Registered concept {concept_idx} intervention -> {forced_value:.4f}")
+        logger.debug(
+            f"Registered concept {concept_idx} intervention -> {forced_value:.4f}"
+        )
 
     def clear_interventions(self) -> None:
         """Clears all active overrides."""
@@ -48,7 +50,7 @@ class ConceptInterventionEngine:
 class ConceptLayer(nn.Module):
     """
     ConceptLayer Bottleneck Projector.
-    
+
     Inherits from torch.nn.Module. Projects high-dimensional hidden tensors
     into explicit low-dimensional concept activation scores between 0.0 and 1.0.
     Integrates causal interventions and updates GWT DataFlowManager telemetry.
@@ -80,7 +82,12 @@ class ConceptLayer(nn.Module):
         self.abstraction_type = abstraction_type.lower()
         self.threshold = threshold
 
-        if self.abstraction_type not in ["projection", "linear", "softmax", "threshold"]:
+        if self.abstraction_type not in [
+            "projection",
+            "linear",
+            "softmax",
+            "threshold",
+        ]:
             raise ValueError(
                 f"Unsupported abstraction_type '{self.abstraction_type}'. "
                 "Must be one of ['projection', 'linear', 'softmax', 'threshold']."
@@ -109,10 +116,10 @@ class ConceptLayer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Projects hidden states, applies active overrides, and registers activations to GWT.
-        
+
         Args:
             x : [B, ..., input_dim] hidden activation tensors.
-            
+
         Returns:
             [B, ..., num_concepts] low-dimensional concept scores.
         """
@@ -138,14 +145,16 @@ class ConceptLayer(nn.Module):
         if interventions:
             # Clamped target tensor matching activations shape
             clamped_activations = activations.detach().clone()
-            
+
             with torch.no_grad():
                 # Build index mask and target values
                 override_mask = torch.zeros(
                     self.num_concepts, device=activations.device, dtype=torch.bool
                 )
                 override_vals = torch.zeros(
-                    self.num_concepts, device=activations.device, dtype=activations.dtype
+                    self.num_concepts,
+                    device=activations.device,
+                    dtype=activations.dtype,
                 )
                 for idx, val in interventions.items():
                     actual_idx = idx
@@ -153,14 +162,16 @@ class ConceptLayer(nn.Module):
                         if idx in self.concept_names:
                             actual_idx = self.concept_names.index(idx)
                         else:
-                            logger.warning(f"Concept override key '{idx}' not found in concept names.")
+                            logger.warning(
+                                f"Concept override key '{idx}' not found in concept names."
+                            )
                             continue
 
                     if isinstance(actual_idx, (int, torch.Tensor)):
                         # Convert to standard Python int if it is a single-element tensor
                         if isinstance(actual_idx, torch.Tensor):
                             actual_idx = int(actual_idx.item())
-                        
+
                         if 0 <= actual_idx < self.num_concepts:
                             override_mask[actual_idx] = True
                             override_vals[actual_idx] = val

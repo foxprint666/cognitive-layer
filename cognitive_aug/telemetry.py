@@ -37,9 +37,9 @@ class GWTTelemetryLogger:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
             "epoch_ms": int(time.time() * 1000),
             "record_type": record_type,
-            **data
+            **data,
         }
-        
+
         try:
             serialized = json.dumps(record)
             # Route to both standard logging (at INFO level) and the raw stream
@@ -86,21 +86,29 @@ class GWTTelemetryLogger:
         damped: bool,
     ) -> None:
         """Logs details of local tripartite synapse gradient sanitization events."""
-        self._emit("GradientSanitizer", {
-            "module_name": module_name,
-            "grad_status": grad_status,
-            "variance": round(variance, 6),
-            "damped": damped
-        })
+        self._emit(
+            "GradientSanitizer",
+            {
+                "module_name": module_name,
+                "grad_status": grad_status,
+                "variance": round(variance, 6),
+                "damped": damped,
+            },
+        )
 
-    def record_error(self, error_msg: str, phase: str, details: Optional[str] = None) -> None:
+    def record_error(
+        self, error_msg: str, phase: str, details: Optional[str] = None
+    ) -> None:
         """Logs critical errors encountered in the GWT layer that triggered fail-safes."""
-        self._emit("BypassFailure", {
-            "error": error_msg,
-            "phase": phase,
-            "details": details or "",
-            "action": "Graceful Fallback Bypassed GWT"
-        })
+        self._emit(
+            "BypassFailure",
+            {
+                "error": error_msg,
+                "phase": phase,
+                "details": details or "",
+                "action": "Graceful Fallback Bypassed GWT",
+            },
+        )
 
 
 def get_telemetry_logger() -> GWTTelemetryLogger:

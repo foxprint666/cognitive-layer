@@ -8,10 +8,8 @@ allowing horizontal scaling across multiple pods using Redis/distributed caches.
 Serializes/deserializes PyTorch tensors as binary blobs with graph isolation.
 """
 
-import io
-import json
 import logging
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Dict, List, Optional
 
 import torch
 
@@ -23,6 +21,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. State Store Protocols (Abstract Interfaces)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class BaseStateStore:
     """Abstract interface for managing GWT transient latent buffers and saliences."""
@@ -71,13 +70,13 @@ class BaseReplayBufferStore:
         """Clear all stored traces."""
         ...
 
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Local In-Memory Implementations (Default / Backward Compatibility)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class InMemoryStateStore(BaseStateStore):
     """Local, in-memory dictionary-based GWT state store."""
@@ -91,7 +90,9 @@ class InMemoryStateStore(BaseStateStore):
 
     def get_buffer(self, name: str) -> torch.Tensor:
         if name not in self._buffers:
-            raise RegistryError(f"No latent buffer found for '{name}' in InMemoryStateStore.")
+            raise RegistryError(
+                f"No latent buffer found for '{name}' in InMemoryStateStore."
+            )
         return self._buffers[name]
 
     def list_buffers(self) -> Dict[str, torch.Tensor]:
@@ -121,19 +122,25 @@ class InMemoryReplayBufferStore(BaseReplayBufferStore):
     def add_trace(self, trace: Dict[str, Any]) -> None:
         # Enforce copy properties locally
         copied_trace = {
-            "latent_states": {k: v.detach().clone() for k, v in trace["latent_states"].items()},
+            "latent_states": {
+                k: v.detach().clone() for k, v in trace["latent_states"].items()
+            },
             "context": trace["context"].detach().clone(),
             "salience": float(trace["salience"]),
         }
         self.buffer.append(copied_trace)
         if len(self.buffer) > self.max_size:
-            min_idx = min(range(len(self.buffer)), key=lambda i: self.buffer[i]["salience"])
+            min_idx = min(
+                range(len(self.buffer)), key=lambda i: self.buffer[i]["salience"]
+            )
             self.buffer.pop(min_idx)
 
     def sample_batch(self, batch_size: int) -> List[Dict[str, Any]]:
         if not self.buffer:
             return []
-        saliences = torch.tensor([t["salience"] for t in self.buffer], dtype=torch.float32)
+        saliences = torch.tensor(
+            [t["salience"] for t in self.buffer], dtype=torch.float32
+        )
         saliences = saliences - saliences.max()
         probs = torch.softmax(saliences, dim=0)
         indices = torch.multinomial(probs, num_samples=batch_size, replacement=True)
@@ -150,12 +157,15 @@ class InMemoryReplayBufferStore(BaseReplayBufferStore):
 # 3. Redis Distributed Implementations (Horizontally Scalable)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _serialize_tensor(tensor: torch.Tensor) -> bytes:
     """Serializes a PyTorch tensor into raw binary bytes using safetensors."""
     try:
         from safetensors.torch import save
     except ImportError:
-        raise DependencyMissingError("safetensors is required. Install via `pip install cognitive-aug[redis]`")
+        raise DependencyMissingError(
+            "safetensors is required. Install via `pip install cognitive-aug[redis]`"
+        )
     return save({"tensor": tensor.detach().clone().cpu()})
 
 
@@ -164,7 +174,9 @@ def _deserialize_tensor(data: bytes) -> torch.Tensor:
     try:
         from safetensors.torch import load
     except ImportError:
-        raise DependencyMissingError("safetensors is required. Install via `pip install cognitive-aug[redis]`")
+        raise DependencyMissingError(
+            "safetensors is required. Install via `pip install cognitive-aug[redis]`"
+        )
     return load(data)["tensor"]
 
 
@@ -186,6 +198,7 @@ class RedisStateStore(BaseStateStore):
 
         try:
             import redis
+
             self.client = redis.from_url(redis_url, **kwargs)
             # Test connection
             self.client.ping()
@@ -203,7 +216,7 @@ class RedisStateStore(BaseStateStore):
     def update_buffer(self, name: str, tensor: torch.Tensor) -> None:
         if self._fallback is not None:
             return self._fallback.update_buffer(name, tensor)
-        
+
         try:
             key = self._get_key("buffer", name)
             serialized = _serialize_tensor(tensor)
@@ -219,12 +232,16 @@ class RedisStateStore(BaseStateStore):
             key = self._get_key("buffer", name)
             data = self.client.get(key)
             if data is None:
-                raise RegistryError(f"No GWT latent buffer found in Redis for '{name}'.")
+                raise RegistryError(
+                    f"No GWT latent buffer found in Redis for '{name}'."
+                )
             return _deserialize_tensor(data)
         except Exception as e:
             if isinstance(e, RegistryError):
                 raise e
-            logger.error(f"GWT Redis Error in get_buffer: {e}. Falling back to zero-filled mock.")
+            logger.error(
+                f"GWT Redis Error in get_buffer: {e}. Falling back to zero-filled mock."
+            )
             # Graceful fallback: return a zero tensor of size [1, 4]
             return torch.zeros(1, 4)
 
@@ -320,6 +337,7 @@ class RedisReplayBufferStore(BaseReplayBufferStore):
 
         try:
             import redis
+
             self.client = redis.from_url(redis_url, **kwargs)
             self.client.ping()
         except Exception as e:
@@ -337,22 +355,26 @@ class RedisReplayBufferStore(BaseReplayBufferStore):
             try:
                 from safetensors.torch import save
             except ImportError:
-                raise DependencyMissingError("safetensors is required for RedisReplayBufferStore.")
+                raise DependencyMissingError(
+                    "safetensors is required for RedisReplayBufferStore."
+                )
 
             # Prepare flat dictionary of tensors for safetensors
             payload_tensors = {
                 "context": trace["context"].detach().clone().cpu(),
-                "salience": torch.tensor([float(trace["salience"])], dtype=torch.float32)
+                "salience": torch.tensor(
+                    [float(trace["salience"])], dtype=torch.float32
+                ),
             }
             for k, v in trace["latent_states"].items():
                 payload_tensors[f"latent_{k}"] = v.detach().clone().cpu()
-            
+
             # Serialize the flat dictionary using safetensors
             binary_blob = save(payload_tensors)
-            
+
             # Push onto list
             self.client.lpush(self.key, binary_blob)
-            
+
             # Bound the size (evict oldest from the list right side)
             if self.client.llen(self.key) > self.max_size:
                 self.client.rpop(self.key)
@@ -367,21 +389,27 @@ class RedisReplayBufferStore(BaseReplayBufferStore):
             try:
                 from safetensors.torch import load
             except ImportError:
-                raise DependencyMissingError("safetensors is required for RedisReplayBufferStore.")
+                raise DependencyMissingError(
+                    "safetensors is required for RedisReplayBufferStore."
+                )
 
             # Fetch all items to do prioritised sampling
             raw_items = self.client.lrange(self.key, 0, -1)
             if not raw_items:
                 return []
-            
+
             traces = []
             saliences = []
             for item in raw_items:
                 tensors = load(item)
                 context = tensors.pop("context")
                 salience = tensors.pop("salience").item()
-                latents = {k.replace("latent_", "", 1): v for k, v in tensors.items() if k.startswith("latent_")}
-                
+                latents = {
+                    k.replace("latent_", "", 1): v
+                    for k, v in tensors.items()
+                    if k.startswith("latent_")
+                }
+
                 trace = {
                     "latent_states": latents,
                     "context": context,
@@ -394,7 +422,7 @@ class RedisReplayBufferStore(BaseReplayBufferStore):
             salience_tensor = salience_tensor - salience_tensor.max()
             probs = torch.softmax(salience_tensor, dim=0)
             indices = torch.multinomial(probs, num_samples=batch_size, replacement=True)
-            
+
             return [traces[i] for i in indices.tolist()]
         except Exception as e:
             logger.error(f"GWT Redis Error in sample_batch: {e}.")

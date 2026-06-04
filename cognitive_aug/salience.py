@@ -14,6 +14,7 @@ MagnitudeSalience       : L2-norm of latent vectors (single vectorized pass).
 EntropySalience         : Normalized Shannon entropy confidence [0, 1].
 TemporalSurpriseSalience: Stateful cosine-distance surprise across time steps.
 """
+
 import logging
 from typing import Dict
 
@@ -37,9 +38,9 @@ def global_pool_latent(latent: torch.Tensor) -> torch.Tensor:
     if latent.ndim <= 2:
         return latent
     elif latent.ndim == 3:
-        return latent.mean(dim=1)           # [B, T, D] -> [B, D]
+        return latent.mean(dim=1)  # [B, T, D] -> [B, D]
     elif latent.ndim == 4:
-        return latent.mean(dim=[2, 3])      # [B, C, H, W] -> [B, C]
+        return latent.mean(dim=[2, 3])  # [B, C, H, W] -> [B, C]
     else:
         dims = list(range(1, latent.ndim - 1))
         return latent.mean(dim=dims)
@@ -108,7 +109,7 @@ class MagnitudeSalience(BaseSalience):
     def forward(self, latent_states: Dict[str, torch.Tensor]) -> torch.Tensor:
         names = list(latent_states.keys())
         pooled = [global_pool_latent(latent_states[n]) for n in names]
-        stacked = torch.stack(pooled, dim=1)            # [B, num_modules, D]
+        stacked = torch.stack(pooled, dim=1)  # [B, num_modules, D]
         return torch.linalg.vector_norm(stacked, dim=-1)  # [B, num_modules]
 
 
@@ -124,7 +125,7 @@ class EntropySalience(BaseSalience):
     def forward(self, latent_states: Dict[str, torch.Tensor]) -> torch.Tensor:
         names = list(latent_states.keys())
         pooled = [global_pool_latent(latent_states[n]) for n in names]
-        stacked = torch.stack(pooled, dim=1)    # [B, num_modules, D]
+        stacked = torch.stack(pooled, dim=1)  # [B, num_modules, D]
 
         p = torch.softmax(stacked, dim=-1)
 
@@ -140,7 +141,7 @@ class EntropySalience(BaseSalience):
         )
 
         # Confidence = 1 - normalized_entropy  (higher = more confident)
-        return 1.0 - (entropy / max_entropy)    # [B, num_modules]
+        return 1.0 - (entropy / max_entropy)  # [B, num_modules]
 
 
 class TemporalSurpriseSalience(BaseSalience):

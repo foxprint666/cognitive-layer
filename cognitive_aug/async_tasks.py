@@ -15,8 +15,6 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
-import torch
-
 logger = logging.getLogger(__name__)
 
 # Global thread-safe queue for local asynchronous processing
@@ -29,25 +27,33 @@ _local_worker_running: bool = False
 # 1. Self-Contained Multi-Threaded Asynchronous Worker (Process/Thread Fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _async_worker_loop() -> None:
     """Consumes and processes high-latency cognitive tasks in the background."""
     global _local_worker_running
     logger.info("GWT local background cognitive worker thread started.")
-    
+
     while _local_worker_running:
         try:
             # Block for a short duration to support hot shutdown
             task_fn, args, kwargs = _local_task_queue.get(timeout=1.0)
-            
+
             try:
-                logger.debug(f"GWT Async Worker: Executing background task: {task_fn.__name__}")
+                logger.debug(
+                    f"GWT Async Worker: Executing background task: {task_fn.__name__}"
+                )
                 task_fn(*args, **kwargs)
-                logger.debug(f"GWT Async Worker: Successfully finished: {task_fn.__name__}")
+                logger.debug(
+                    f"GWT Async Worker: Successfully finished: {task_fn.__name__}"
+                )
             except Exception as ex:
-                logger.error(f"GWT Async Worker: Error executing task '{task_fn.__name__}': {ex}", exc_info=True)
+                logger.error(
+                    f"GWT Async Worker: Error executing task '{task_fn.__name__}': {ex}",
+                    exc_info=True,
+                )
             finally:
                 _local_task_queue.task_done()
-                
+
         except queue.Empty:
             continue
         except Exception as e:
@@ -80,7 +86,9 @@ def enqueue_background_task(task_fn: Any, *args: Any, **kwargs: Any) -> None:
     """Enqueues a high-latency function to be run asynchronously in the background."""
     start_async_worker()
     _local_task_queue.put((task_fn, args, kwargs))
-    logger.debug(f"Successfully enqueued task '{task_fn.__name__}' to local GWT async queue.")
+    logger.debug(
+        f"Successfully enqueued task '{task_fn.__name__}' to local GWT async queue."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -91,7 +99,7 @@ def enqueue_background_task(task_fn: Any, *args: Any, **kwargs: Any) -> None:
 celery_app: Optional[Any] = None
 try:
     from celery import shared_task
-    
+
     @shared_task(name="cognitive_aug.tasks.async_sleep_consolidation")
     def celery_sleep_consolidation(
         engine_state_prefix: str,
@@ -110,20 +118,22 @@ try:
         from cognitive_aug.state import RedisReplayBufferStore, RedisStateStore
         from cognitive_aug.engine import CognitiveAugEngine
         from cognitive_aug.sleep import CognitiveReplayBuffer
-        
+
         # 1. Reconstruct mock engine context in the worker thread
         engine = CognitiveAugEngine()
-        
+
         # Override state store to pull from shared Redis Enterprise key
         state_store = RedisStateStore(key_prefix=engine_state_prefix)
         engine.data_flow._state_store = state_store
-        
+
         # Hook up shared distributed replay buffer
-        replay_store = RedisReplayBufferStore(key=f"{engine_state_prefix}:replay_buffer")
+        replay_store = RedisReplayBufferStore(
+            key=f"{engine_state_prefix}:replay_buffer"
+        )
         replay_buffer = CognitiveReplayBuffer()
         replay_buffer.store = replay_store
         engine.attach_replay_buffer(replay_buffer)
-        
+
         # 2. Execute consolidation
         telemetry = engine.enter_sleep_phase(
             steps=steps,
@@ -131,7 +141,7 @@ try:
             pruning_threshold=pruning_threshold,
             batch_size=batch_size,
         )
-        
+
         logger.info(f"Celery Sleep task successfully completed. Telemetry: {telemetry}")
         return telemetry
 
@@ -144,6 +154,7 @@ except ImportError:
 # 3. Waking Execution Loop Offloading Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def offloaded_enter_sleep_phase(
     engine: Any,
     steps: int = 5,
@@ -154,21 +165,25 @@ def offloaded_enter_sleep_phase(
 ) -> Any:
     """
     Asynchronously triggers GWT sleep consolidation off the main inference thread.
-    
+
     If use_celery is enabled and Celery is configured, offloads as a distributed task.
     Otherwise, handles it via local multi-threaded queue.
     """
     if use_celery and "celery_sleep_consolidation" in globals():
         # Offload via Celery task queue
-        prefix = getattr(engine.data_flow._state_store, "key_prefix", "cognitive_aug:state")
+        prefix = getattr(
+            engine.data_flow._state_store, "key_prefix", "cognitive_aug:state"
+        )
         task = globals()["celery_sleep_consolidation"].delay(
             engine_state_prefix=prefix,
             steps=steps,
             learning_rate=learning_rate,
             pruning_threshold=pruning_threshold,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
-        logger.info(f"GWT: Offloaded sleep phase consolidation to Celery (Task ID: {task.id})")
+        logger.info(
+            f"GWT: Offloaded sleep phase consolidation to Celery (Task ID: {task.id})"
+        )
         return {
             "status": "Offloaded",
             "task_id": task.id,
@@ -182,10 +197,11 @@ def offloaded_enter_sleep_phase(
                 steps=steps,
                 learning_rate=learning_rate,
                 pruning_threshold=pruning_threshold,
-                batch_size=batch_size
+                batch_size=batch_size,
             )
             # Log structured metrics in worker thread
             from cognitive_aug.telemetry import get_telemetry_logger
+
             json_logger = get_telemetry_logger()
             json_logger.record_consolidation(telemetry)
 

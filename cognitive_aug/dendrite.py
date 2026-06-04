@@ -9,7 +9,7 @@ pathways. This prevents catastrophic forgetting and enhances parameter efficienc
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 # Core Component: ActiveDendriteGate
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ActiveDendriteGate(nn.Module):
     """
     Highly optimized, fully vectorized Active Dendritic Gating layer.
-    
+
     In biological systems, dendritic branches act as non-linear pre-processors that
     use global context to dynamically gate or amplify local feedforward pathways.
     This module implements modulatory gain scaling and thresholded NMDA spiking.
@@ -66,18 +67,26 @@ class ActiveDendriteGate(nn.Module):
                 "Must be one of ['modulatory-gain', 'nmda-threshold']."
             )
 
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
 
         # Vectorized stacked linear projection mapping context -> branches * features
-        self.context_proj = nn.Linear(context_dim, num_branches * feedforward_dim, **factory_kwargs)
-        
+        self.context_proj = nn.Linear(
+            context_dim, num_branches * feedforward_dim, **factory_kwargs
+        )
+
         # Structural pruning masks to permanently sever pruned connections
-        self.register_buffer("pruning_mask", torch.ones_like(self.context_proj.weight.data))
+        self.register_buffer(
+            "pruning_mask", torch.ones_like(self.context_proj.weight.data)
+        )
         self.context_proj.weight.register_hook(lambda grad: grad * self.pruning_mask)
-        
+
         if self.context_proj.bias is not None:
-            self.register_buffer("bias_pruning_mask", torch.ones_like(self.context_proj.bias.data))
-            self.context_proj.bias.register_hook(lambda grad: grad * self.bias_pruning_mask)
+            self.register_buffer(
+                "bias_pruning_mask", torch.ones_like(self.context_proj.bias.data)
+            )
+            self.context_proj.bias.register_hook(
+                lambda grad: grad * self.bias_pruning_mask
+            )
 
         # Detached branch activation scores for telemetry / diagnostic dashboards
         # Shape: [B, num_branches, feedforward_dim]
@@ -103,7 +112,7 @@ class ActiveDendriteGate(nn.Module):
 
         # Reshape to separate dendritic branches: [B, num_branches, feedforward_dim]
         branch_raw = proj.view(batch_size, self.num_branches, self.feedforward_dim)
-        
+
         # Sigmoid gain temperature scaling (ACh focus modulation)
         gain_temp = getattr(self, "gain_temperature", 1.0)
         if isinstance(gain_temp, torch.Tensor):
@@ -119,10 +128,14 @@ class ActiveDendriteGate(nn.Module):
             branch_depolarization = branch_score.mean(dim=-1, keepdim=True)
 
             # 2. Binary heaviside spike mask
-            spiked_mask = (branch_depolarization >= self.threshold).to(branch_score.dtype)
+            spiked_mask = (branch_depolarization >= self.threshold).to(
+                branch_score.dtype
+            )
 
             # 3. Straight-Through Estimator (STE) for differentiable gradient flow
-            ste_gate = spiked_mask + (branch_depolarization - branch_depolarization.detach())
+            ste_gate = spiked_mask + (
+                branch_depolarization - branch_depolarization.detach()
+            )
 
             # 4. Gate active branches; mute inactive branches to zero
             branch_gates = ste_gate * branch_score
@@ -181,6 +194,7 @@ class ActiveDendriteGate(nn.Module):
 # Ease-of-Use Component: DendriticModuleAdapter
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class DendriticModuleAdapter(ModuleAdapter):
     """
     Subclass of ModuleAdapter that automatically appends ActiveDendriteGate
@@ -214,15 +228,23 @@ class DendriticModuleAdapter(ModuleAdapter):
             resolved_name = name_or_module
             resolved_module = module
             if resolved_module is None:
-                raise ValueError("module must be provided when the first argument is a name.")
+                raise ValueError(
+                    "module must be provided when the first argument is a name."
+                )
         elif isinstance(name_or_module, nn.Module):
             resolved_module = name_or_module
-            resolved_name = name if name is not None else f"dendritic_{resolved_module.__class__.__name__.lower()}"
+            resolved_name = (
+                name
+                if name is not None
+                else f"dendritic_{resolved_module.__class__.__name__.lower()}"
+            )
         elif name_or_module is None:
             resolved_module = module
             resolved_name = name
             if resolved_module is None:
-                raise ValueError("A PyTorch Module must be provided as a positional or keyword argument.")
+                raise ValueError(
+                    "A PyTorch Module must be provided as a positional or keyword argument."
+                )
         else:
             raise ValueError(f"Invalid first argument type: {type(name_or_module)}")
 
@@ -287,7 +309,14 @@ class DendriticModuleAdapter(ModuleAdapter):
                 return module.hidden_size
 
         # 2. Attribute-level check
-        for attr in ["out_features", "out_channels", "hidden_size", "output_dim", "latent_dim", "d_model"]:
+        for attr in [
+            "out_features",
+            "out_channels",
+            "hidden_size",
+            "output_dim",
+            "latent_dim",
+            "d_model",
+        ]:
             if hasattr(module, attr):
                 val = getattr(module, attr)
                 if isinstance(val, int):
@@ -301,20 +330,33 @@ class DendriticModuleAdapter(ModuleAdapter):
 
         return None
 
-    def _init_dendrite_gate(self, feedforward_dim: int, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None) -> None:
+    def _init_dendrite_gate(
+        self,
+        feedforward_dim: int,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> None:
         """Helper to construct and register the active dendrite gate."""
         # Resolve device/dtype: passed arguments -> stored attributes -> module params fallback -> defaults
         target_device = device
         if target_device is None:
             target_device = getattr(self, "_device", None)
         if target_device is None:
-            target_device = next(self.module.parameters()).device if list(self.module.parameters()) else torch.device("cpu")
+            target_device = (
+                next(self.module.parameters()).device
+                if list(self.module.parameters())
+                else torch.device("cpu")
+            )
 
         target_dtype = dtype
         if target_dtype is None:
             target_dtype = getattr(self, "_dtype", None)
         if target_dtype is None:
-            target_dtype = next(self.module.parameters()).dtype if list(self.module.parameters()) else torch.float32
+            target_dtype = (
+                next(self.module.parameters()).dtype
+                if list(self.module.parameters())
+                else torch.float32
+            )
 
         self.dendrite_gate = ActiveDendriteGate(
             feedforward_dim=feedforward_dim,
@@ -325,13 +367,15 @@ class DendriticModuleAdapter(ModuleAdapter):
             device=target_device,
             dtype=target_dtype,
         )
-        
+
         # Register as a submodule so parameters appear in adapter.parameters()
         self.add_module("dendrite_gate", self.dendrite_gate)
 
         # Cast to correct device & dtype to match core module
         self.dendrite_gate.to(device=target_device, dtype=target_dtype)
-        logger.debug(f"ActiveDendriteGate successfully initialized for module '{self.name}'.")
+        logger.debug(
+            f"ActiveDendriteGate successfully initialized for module '{self.name}'."
+        )
 
     def _register_forward_hook(self) -> None:
         """Overrides parent forward hook to intercept and apply active dendritic gating."""
@@ -354,8 +398,12 @@ class DendriticModuleAdapter(ModuleAdapter):
             # 2. Lazy-initialization fallback if output dim could not be statically inspected
             if self.dendrite_gate is None:
                 feedforward_dim = latent.shape[-1]
-                logger.info(f"Dynamically initializing ActiveDendriteGate for '{self.name}' with feedforward_dim={feedforward_dim}")
-                self._init_dendrite_gate(feedforward_dim, device=latent.device, dtype=latent.dtype)
+                logger.info(
+                    f"Dynamically initializing ActiveDendriteGate for '{self.name}' with feedforward_dim={feedforward_dim}"
+                )
+                self._init_dendrite_gate(
+                    feedforward_dim, device=latent.device, dtype=latent.dtype
+                )
 
             # 3. Retrieve global GWT context broadcast vector
             context = self.get_last_broadcast()
@@ -365,7 +413,12 @@ class DendriticModuleAdapter(ModuleAdapter):
             if context.shape[0] == 1 and batch_size > 1:
                 context = context.expand(batch_size, -1)
             elif context.shape[0] != batch_size:
-                context = torch.zeros(batch_size, self.latent_dim, device=latent.device, dtype=latent.dtype)
+                context = torch.zeros(
+                    batch_size,
+                    self.latent_dim,
+                    device=latent.device,
+                    dtype=latent.dtype,
+                )
 
             # Device Alignment: Ensure context is on the latent's device (Pipeline Parallelism Support)
             context = context.to(device=latent.device, dtype=latent.dtype)
@@ -375,6 +428,7 @@ class DendriticModuleAdapter(ModuleAdapter):
 
             # Dimension Agnosticism: Pool varying ranks (3D sequence, 4D vision) to flat 2D
             from .salience import global_pool_latent
+
             gwt_latent = global_pool_latent(gated_latent)
 
             # 6. Apply optional learnable projection to workspace dimension
@@ -393,12 +447,15 @@ class DendriticModuleAdapter(ModuleAdapter):
                 return gated_latent
 
         self._hook_handle = self.module.register_forward_hook(hook_fn)
-        logger.debug(f"Dendritic forward hook successfully registered on module '{self.name}'.")
+        logger.debug(
+            f"Dendritic forward hook successfully registered on module '{self.name}'."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Telemetry Integration
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def get_dendritic_status(model_or_adapter: nn.Module) -> Dict[str, float]:
     """

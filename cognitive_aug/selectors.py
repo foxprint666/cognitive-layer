@@ -14,6 +14,7 @@ CosineSimilaritySelector       : Vectorized cosine similarity against a top-down
 VectorizedCrossAttentionSelector: Native scaled_dot_product_attention (FlashAttention-speed).
 EfficientGumbelSoftmaxSelector : Hard winner-take-all with full differentiability.
 """
+
 import logging
 from typing import Optional
 
@@ -77,11 +78,13 @@ class CosineSimilaritySelector(BaseSelector):
         batch_size = keys.shape[0]
 
         if query is None:
-            query = torch.zeros(batch_size, self.key_dim, device=keys.device, dtype=keys.dtype)
+            query = torch.zeros(
+                batch_size, self.key_dim, device=keys.device, dtype=keys.dtype
+            )
 
         # q_proj: [B, 1, key_dim]  —  broadcast cosine similarity over all modules
         q_proj = query.unsqueeze(1)
-        scores = F.cosine_similarity(keys, q_proj, dim=-1)   # [B, num_modules]
+        scores = F.cosine_similarity(keys, q_proj, dim=-1)  # [B, num_modules]
 
         if self.temperature != 1.0:
             scores = scores / self.temperature
@@ -127,7 +130,9 @@ class VectorizedCrossAttentionSelector(BaseSelector):
         batch_size, num_modules, _ = keys.shape
 
         if query is None:
-            query = torch.zeros(batch_size, self.key_dim, device=keys.device, dtype=keys.dtype)
+            query = torch.zeros(
+                batch_size, self.key_dim, device=keys.device, dtype=keys.dtype
+            )
 
         # Project & reshape Query: [B, 1, key_dim] -> [B, H, 1, head_dim]
         q = self.q_proj(query).unsqueeze(1)
@@ -135,12 +140,16 @@ class VectorizedCrossAttentionSelector(BaseSelector):
 
         # Project & reshape Keys: [B, num_modules, key_dim] -> [B, H, num_modules, head_dim]
         k = self.k_proj(keys)
-        k = k.view(batch_size, num_modules, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, num_modules, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
 
         # Identity matrix as Value — avoids value mixing, extracts pure weights
         # [B, H, num_modules, num_modules]  (broadcast, no copy)
         v = torch.eye(num_modules, device=keys.device, dtype=keys.dtype)
-        v = v.view(1, 1, num_modules, num_modules).expand(batch_size, self.num_heads, -1, -1)
+        v = v.view(1, 1, num_modules, num_modules).expand(
+            batch_size, self.num_heads, -1, -1
+        )
 
         # Native scaled dot-product attention: output [B, H, 1, num_modules]
         attn_out = F.scaled_dot_product_attention(
@@ -181,11 +190,13 @@ class EfficientGumbelSoftmaxSelector(BaseSelector):
         batch_size, num_modules, _ = keys.shape
 
         if query is None:
-            query = torch.zeros(batch_size, self.key_dim, device=keys.device, dtype=keys.dtype)
+            query = torch.zeros(
+                batch_size, self.key_dim, device=keys.device, dtype=keys.dtype
+            )
 
         # Project query and compute dot-product logits: [B, num_modules]
-        q_proj = self.query_proj(query).unsqueeze(-1)       # [B, key_dim, 1]
-        logits = torch.matmul(keys, q_proj).squeeze(-1)     # [B, num_modules]
-        logits = logits / (self.key_dim ** 0.5)
+        q_proj = self.query_proj(query).unsqueeze(-1)  # [B, key_dim, 1]
+        logits = torch.matmul(keys, q_proj).squeeze(-1)  # [B, num_modules]
+        logits = logits / (self.key_dim**0.5)
 
         return F.gumbel_softmax(logits, tau=self.tau, hard=self.hard, dim=-1)

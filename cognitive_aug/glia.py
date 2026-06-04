@@ -9,7 +9,7 @@ excitotoxicity (gradient stabilization), and optimize the localized training pro
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class GradientSanitizerHook:
     """
     Gradient Sanitizer Hook (Excitotoxicity Defense).
-    
+
     Automatically registers backward hooks onto parameter tensors of wrapped module
     subsystems. Instead of a static global clip, it tracks running gradient norm
     statistics locally under `with torch.no_grad():`. If sudden gradient spikes occur,
@@ -79,6 +79,7 @@ class GradientSanitizerHook:
 
     def _make_hook(self, param_id: int):
         """Creates the closure hook function for a specific parameter."""
+
         def hook_fn(grad: torch.Tensor) -> Optional[torch.Tensor]:
             # Always run monitoring and calculations under no_grad to prevent graph overhead
             with torch.no_grad():
@@ -87,10 +88,10 @@ class GradientSanitizerHook:
 
                 # 1. Compute local gradient norm (L2 norm)
                 g = float(torch.linalg.vector_norm(grad).item())
-                
+
                 mean = self.running_mean[param_id]
                 var = self.running_var[param_id]
-                std = var ** 0.5
+                std = var**0.5
                 steps = self.step_count[param_id]
 
                 # 2. Excitotoxicity spike check:
@@ -109,7 +110,9 @@ class GradientSanitizerHook:
                 self.step_count[param_id] += 1
                 self.running_mean[param_id] = self.alpha * mean + (1.0 - self.alpha) * g
                 # Variance: EMA of squared deviations
-                self.running_var[param_id] = self.alpha * var + (1.0 - self.alpha) * ((g - mean) ** 2)
+                self.running_var[param_id] = self.alpha * var + (1.0 - self.alpha) * (
+                    (g - mean) ** 2
+                )
 
                 return None
 
@@ -120,7 +123,9 @@ class GradientSanitizerHook:
         for handle in self.hook_handles:
             handle.remove()
         self.hook_handles.clear()
-        logger.debug(f"Removed all gradient sanitizer hooks from '{self.adapter.name}'.")
+        logger.debug(
+            f"Removed all gradient sanitizer hooks from '{self.adapter.name}'."
+        )
 
     def __del__(self) -> None:
         self.remove_hooks()
@@ -129,7 +134,7 @@ class GradientSanitizerHook:
 class AstrocyteManager(nn.Module):
     """
     AstrocyteManager Layer.
-    
+
     A tripartite synapse model that actively monitors synaptic traffic to implement
     metaplasticity (modulating local learning rates based on ACh focus vs surprise NE)
     and handles dynamic gradient stabilization.
@@ -229,17 +234,19 @@ class AstrocyteManager(nn.Module):
     def adjust_learning_rates(self, optimizer: torch.optim.Optimizer) -> None:
         """
         Metaplasticity Optimizer Modifier.
-        
+
         Computes localized learning rate scaling factors in a highly optimized,
         vectorized PyTorch manner, and modulates the learning rates inside the
         optimizer's corresponding param_groups in-place.
-        
+
         Schedules:
             - High focus (ACh) + Low surprise (NE) = lock down stable memories (lr * 0.5)
             - High NE + High salience = unlock weights to accelerate learning (lr * 1.5)
         """
         if self.engine is None:
-            raise ValueError("AstrocyteManager is not attached to any CognitiveAugEngine.")
+            raise ValueError(
+                "AstrocyteManager is not attached to any CognitiveAugEngine."
+            )
 
         # Reset all gradient sanitizer statuses to Stable at the start of each optimization step
         for hook in self._sanitizer_hooks.values():
@@ -285,7 +292,7 @@ class AstrocyteManager(nn.Module):
             # Modulate optimizer param_groups in-place
             for group in optimizer.param_groups:
                 group_id = id(group)
-                
+
                 module_name = self._get_group_module_name(group, self.engine)
                 if module_name is None:
                     continue
@@ -307,7 +314,9 @@ class AstrocyteManager(nn.Module):
                 group["lr"] = new_lr
                 self._last_applied_lrs[group_id] = new_lr
 
-    def _get_group_module_name(self, group: Dict[str, Any], engine: Any) -> Optional[str]:
+    def _get_group_module_name(
+        self, group: Dict[str, Any], engine: Any
+    ) -> Optional[str]:
         """Maps an optimizer param_group to a registered module adapter name."""
         # 1. Custom explicit metadata tag
         if "module_name" in group:

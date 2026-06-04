@@ -7,6 +7,7 @@ CognitiveOutputRouter maps a single workspace tensor to multiple dedicated
 output heads (e.g. classification, actions, feedback) in one vectorized
 matrix projection — zero loops, zero tensor copies.
 """
+
 import logging
 from typing import Dict
 
@@ -74,7 +75,7 @@ class CognitiveOutputRouter(nn.Module):
         Returns:
             ``{head_name: tensor [B, head_dim]}`` — views, not copies.
         """
-        projected = self.parallel_proj(workspace_tensor)    # [B, total_out_dim]
+        projected = self.parallel_proj(workspace_tensor)  # [B, total_out_dim]
 
         # Slice into head views — no data copied, memory shared with `projected`
         return {

@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from cognitive_aug import (
     ExtendedDendriticModuleAdapter,
@@ -7,7 +6,7 @@ from cognitive_aug import (
     NeurogenesisConsolidationEngine,
     NeurogenesisReplayBuffer,
     dynamic_register_parameters,
-    NeurogenesisAstrocyteManager
+    NeurogenesisAstrocyteManager,
 )
 
 # 1. Initialize dynamic module adapter and homeostatic astrocyte regulator
@@ -25,13 +24,17 @@ manager = NeurogenesisManager(
     config=config,
     astrocyte_manager=astrocyte,
     replay_buffer=replay_buffer,
-    metacognitive_monitor=None
+    metacognitive_monitor=None,
 )
 
 # 4. Simulate a training pass under unexpected high uncertainty (NE surprise spike)
 x = torch.randn(2, in_dim)
 context = torch.randn(2, context_dim)
-metrics = {"NE_surprise": torch.tensor(0.95), "ACh_focus": torch.tensor(0.1), "current_latent": context}
+metrics = {
+    "NE_surprise": torch.tensor(0.95),
+    "ACh_focus": torch.tensor(0.1),
+    "current_latent": context,
+}
 
 print(f"Pre-neurogenesis branches count: {len(adapter.branches)}")
 
@@ -42,7 +45,7 @@ print(f"Neurogenesis status: {status}")
 if status == "neurogenesis_triggered":
     new_idx = len(adapter.branches) - 1
     print(f"Successfully spawned new branch at index: {new_idx}")
-    
+
     # Register the newly spawned branch parameters in the active optimizer
     dynamic_register_parameters(optimizer, adapter, new_idx)
     print("Registered new parameters inside the live running Optimizer.")
@@ -56,6 +59,8 @@ print(f"Calcium Level: {astrocyte.calcium_store.item():.4f}")
 target = torch.randn(2, in_dim)
 replay_buffer.push(x, context, target, surprise=1.0, neuro_event=True)
 
-sleep_engine = NeurogenesisConsolidationEngine(adapter, replay_buffer, threshold_perm=0.3)
+sleep_engine = NeurogenesisConsolidationEngine(
+    adapter, replay_buffer, threshold_perm=0.3
+)
 sleep_engine.execute_sleep_cycle(optimizer, steps=2)
 print("Completed offline sleep-cycle consolidation evaluation.")
