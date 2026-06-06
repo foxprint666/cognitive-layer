@@ -58,6 +58,7 @@ class GWTTelemetryLogger:
         ignition_threshold: float,
         modules_telemetry: Dict[str, Dict[str, Any]],
         crossbar_weights: Optional[Dict[str, Any]] = None,
+        iit_phi: Optional[float] = None,
     ) -> None:
         """Logs live details of a waking GWT competitive broadcast step."""
         data = {
@@ -71,6 +72,8 @@ class GWTTelemetryLogger:
         }
         if crossbar_weights:
             data["crossbar_bindings"] = crossbar_weights
+        if iit_phi is not None:
+            data["system_integration_phi"] = round(iit_phi, 6)
 
         self._emit("WakingStep", data)
 

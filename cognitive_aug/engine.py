@@ -323,6 +323,9 @@ class AttentionSelector(nn.Module):
             scores = torch.matmul(keys, q_proj).squeeze(-1)  # [B, num_modules]
 
         scores = scores / (key_dim**0.5)
+        # Store raw pre-softmax logits for IIT calculation
+        self.last_logits = scores.detach()
+
         weights = F.softmax(scores, dim=-1)
 
         if self.ignition_threshold > 0.0:
@@ -464,8 +467,9 @@ class GlobalWorkspace(nn.Module):
 
         weights = self.selector(keys_stacked, query)  # [B, num_modules]
 
-        # Cache detached parameters for metacognitive neuromodulation telemetry
+        # Cache detached parameters for metacognitive neuromodulation and IIT
         self.last_weights = weights.detach()
+        self.last_logits = getattr(self.selector, "last_logits", self.last_weights)
         self.last_query = query.detach()
         self.last_keys = keys_stacked.detach()
 
@@ -502,6 +506,8 @@ class CognitiveAugEngine:
         self.glial_manager: Optional[Any] = None
         self.concept_layers: Dict[str, Any] = {}
         self.crossbar: Optional[Any] = None
+        self.iit_monitor: Optional[Any] = None
+        self.latest_phi: float = 0.0
         self._step_counter: int = 0
 
     def attach_neuromodulator(self, monitor: Any) -> None:
@@ -533,6 +539,13 @@ class CognitiveAugEngine:
                 adapter.engine = self
         logger.info("Successfully attached CognitiveCrossbar to CognitiveAugEngine.")
 
+    def attach_iit_monitor(self, monitor: Any) -> None:
+        """Attach an IIT Integration Monitor to measure system irreducibility (Phi)."""
+        self.iit_monitor = monitor
+        logger.info(
+            "Successfully attached IITIntegrationMonitor to CognitiveAugEngine."
+        )
+
     def inspect(self) -> str:
         """
         Builds a gorgeous diagnostic panel showing module states, GWT slot buffers,
@@ -553,6 +566,11 @@ class CognitiveAugEngine:
             lines.append(f"  {chems['dashboard']}")
         else:
             lines.append("Neuromodulator: Inactive")
+
+        if self.iit_monitor is not None:
+            bar = make_ascii_bar(self.latest_phi)
+            lines.append(f"System Integration (Φ): {bar} {self.latest_phi:.4f}")
+
         lines.append("-" * 60)
 
         # 2. Registered Modules
@@ -794,6 +812,21 @@ class CognitiveAugEngine:
             for adapter in adapters:
                 adapter.receive_broadcast(broadcast_state)
 
+            if self.iit_monitor is not None:
+                if (
+                    self.crossbar is not None
+                    and getattr(self.crossbar, "last_logits", None) is not None
+                ):
+                    # For multi-slot systems, use Crossbar matrix raw logits
+                    self.latest_phi = self.iit_monitor.calculate_phi(
+                        self.crossbar.last_logits
+                    )
+                elif hasattr(self.workspace, "last_logits"):
+                    # For star-topology systems, use GlobalWorkspace raw logits
+                    self.latest_phi = self.iit_monitor.calculate_phi(
+                        self.workspace.last_logits
+                    )
+
             # Record waking transition to episodic cache if buffer is attached (O(1) overhead)
             if self.replay_buffer is not None:
                 self.record_transition()
@@ -860,6 +893,7 @@ class CognitiveAugEngine:
                     ignition_threshold=thresh,
                     modules_telemetry=modules_telemetry,
                     crossbar_weights=crossbar_data,
+                    iit_phi=self.latest_phi if self.iit_monitor else None,
                 )
                 self._step_counter += 1
             except Exception as tel_ex:

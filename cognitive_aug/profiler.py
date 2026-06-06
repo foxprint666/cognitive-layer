@@ -270,7 +270,7 @@ def register_selective_hooks(
 
     logger.info(
         f"GWT Micro-Profiler: Hooking top {num_to_hook}/{len(profiled_layers)} "
-        f"layers ({selective_ratio*100:.1f}% selective ratio) to optimize TTFT."
+        f"layers ({selective_ratio * 100:.1f}% selective ratio) to optimize TTFT."
     )
 
     try:

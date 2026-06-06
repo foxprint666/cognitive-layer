@@ -136,6 +136,11 @@ from .neurogenesis import (
     TransferSalienceCalculator,
 )
 
+# "?"? IIT 4.0 Causal Integration Monitor "?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?
+from .iit import (
+    IITIntegrationMonitor,
+)
+
 __all__ = [
     # Engine & workspace
     "CognitiveAugEngine",
@@ -206,4 +211,6 @@ __all__ = [
     "NeurogenesisGradientSanitizerHook",
     "NeurogenesisAstrocyteManager",
     "TransferSalienceCalculator",
+    # IIT
+    "IITIntegrationMonitor",
 ]

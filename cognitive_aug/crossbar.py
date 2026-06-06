@@ -64,6 +64,7 @@ class CognitiveCrossbar(nn.Module):
         # Dynamic state buffers
         self._stacked_latents: Optional[torch.Tensor] = None
         self.last_weights: Optional[torch.Tensor] = None
+        self.last_logits: Optional[torch.Tensor] = None
 
         # Engine reference
         self.engine: Optional[Any] = None
@@ -115,6 +116,7 @@ class CognitiveCrossbar(nn.Module):
         # 2. All-to-all cross-attention scoring
         # scores shape: [B, num_slots, num_slots]
         scores = torch.matmul(Q, K.transpose(-2, -1)) / (slot_dim**0.5)
+        self.last_logits = scores.detach()
         weights = F.softmax(scores, dim=-1)
 
         # 3. Dynamic scaling of binding weights driven by global neuromodulators (if attached)
