@@ -11,8 +11,13 @@ An enterprise-grade, lightweight, and mathematically rigorous PyTorch cognitive 
 
 ## 1. Package Executive Overview & Installation
 
-### Architectural Overview
-The GWT library acts as a framework-agnostic, low-overhead cognitive layer that hooks into PyTorch models (Transformers, CNNs, and Spiking Neural Networks) without requiring intrusive alterations to their source code. By leveraging PyTorch forward and backward hooks, GWT intercepts intermediate representations, routes them through a central workspace bottleneck where they compete for attention, and broadcasts a unified cognitive context vector back to all subsystems.
+### Architectural Overview: The Dual-Engine Paradigm
+The GWT library supports two distinct execution models tailored for different deployment needs:
+
+1. **The Wrapper Engine (`ModuleAdapter`)**: Acts as a framework-agnostic, low-overhead cognitive layer that hooks into existing, locked black-box foundation models (Llama, Mistral, ResNet) without requiring intrusive alterations to their source code. By leveraging PyTorch forward and backward hooks, it intercepts intermediate representations, routes them through a central workspace bottleneck, and broadcasts context back.
+2. **The Standalone Core Engine (`StandaloneBrainModel`)**: A true Recurrent GWT Core Neural Engine designed for training autonomous neuromorphic agents from scratch. Instead of wrapping an external model, structural sub-networks (vision encoder, text transformer, action planner) are wired directly into a parallel Cognitive Crossbar. It processes temporal loops via explicit recurrent context tracking, eliminating the need for hooks and acting as a central, biologically-inspired PyTorch module.
+
+#### 1. The Wrapper Engine (Hook-Based Adapter)
 
 ```mermaid
 graph TD
@@ -50,6 +55,34 @@ graph TD
         IA & AL & EB -->|Add/Bridge Dendritic Branch| EDMA[Extended Dendritic Module Adapter]
         NAM[Neurogenesis Astrocyte Manager] -->|Growth Excitotoxicity Safety| NM
         EDMA -->|Active NMDA Gating| GW
+    end
+```
+
+#### 2. The Autonomic Brain Engine (Standalone Recurrent Core)
+
+```mermaid
+graph TD
+    subgraph SBL ["Structural Brain Lobes (No Hooks)"]
+        V[Visual Lobe] -->|Direct Route| S0[Crossbar Slot 0]
+        L[Language Lobe] -->|Direct Route| S1[Crossbar Slot 1]
+        M[Motor Lobe] -->|Direct Route| S2[Crossbar Slot 2]
+        RC[Recurrent Context] -->|Historical Loop| S3[Crossbar Slot 3]
+    end
+
+    subgraph CB ["Cognitive Crossbar Bus (Phase v0.7)"]
+        S0 & S1 & S2 & S3 -->|All-to-all Mapping| ROUTE[Slot Projections]
+    end
+
+    subgraph GW ["Global Workspace Bottleneck (Phase v0.1)"]
+        ROUTE -->|Proposals| ATTN[Attention Competition]
+        ATTN -->|Winner Context| BROADCAST[Broadcast O'1' State]
+        BROADCAST --> RC
+    end
+
+    subgraph MET ["Metacognition & Protection (Phase v0.4 & v0.5)"]
+        ATTN --> MM[Metacognitive Monitor]
+        MM -->|ACh/NE Signals| GW
+        GS[Gradient Sanitizer] -->|Direct Shielding| SBL
     end
 ```
 
