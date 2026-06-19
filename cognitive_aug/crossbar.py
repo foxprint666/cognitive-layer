@@ -86,7 +86,10 @@ class CognitiveCrossbar(nn.Module):
                 batch_size, self.num_slots, self.slot_dim, device=device, dtype=dtype
             )
 
-        self._stacked_latents[:, slot_idx] = latent
+        # Use out-of-place update to avoid versioning issues with recurrent gradients
+        new_stacked = self._stacked_latents.clone()
+        new_stacked[:, slot_idx] = latent
+        self._stacked_latents = new_stacked
 
     def forward(self, x: Optional[torch.Tensor] = None) -> torch.Tensor:
         """

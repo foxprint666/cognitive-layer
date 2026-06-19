@@ -9,6 +9,7 @@ in-place based on metacognitive surprise, representation entropy, and goal align
 """
 
 import logging
+import math
 from typing import Any, Dict, Optional
 
 import torch
@@ -235,6 +236,36 @@ class MetacognitiveMonitor:
 
             # 5. Apply dynamic modulations in-place
             self.adapter.apply(engine, self.ne, self.ach)
+
+    def modulate_from_weights(self, weights: torch.Tensor) -> None:
+        """
+        Directly updates virtual chemical levels using pre-computed attention weight vectors
+        during standalone recurrent sequences.
+        """
+        with torch.no_grad():
+            if weights.dim() == 2:
+                # Flatten across batch dimension to extract entropy
+                p = weights.mean(dim=0)
+            else:
+                p = weights
+
+            # Compute Shannon Entropy
+            entropy = -torch.sum(p * torch.log(p + 1e-9)).item()
+            max_entropy = math.log(p.shape[0]) if p.shape[0] > 0 else 1.0
+            normalized_entropy = entropy / max_entropy
+
+            # Focus metric: High when focus is sharp and entropy is low
+            focus = 1.0 - normalized_entropy
+
+            # Simulated surprise: Change in weights variance as a simple proxy
+            surprise_val = float(torch.var(weights).item())
+
+            # Update chemical EMA curves
+            self.ne = self.alpha_ne * self.ne + (1.0 - self.alpha_ne) * surprise_val
+            self.ach = self.alpha_ach * self.ach + (1.0 - self.alpha_ach) * focus
+
+            self.ne = max(0.0, min(1.0, self.ne))
+            self.ach = max(0.0, min(1.0, self.ach))
 
     def get_chemical_levels(self) -> Dict[str, Any]:
         """

@@ -112,9 +112,9 @@ class ExtendedDendriticModuleAdapter(ModuleAdapter):
             # GWT Hook mode
             name = name_or_feedforward_dim
             module = module_or_context_dim
-            assert isinstance(module, nn.Module), (
-                "module must be a nn.Module in GWT Hook mode"
-            )
+            assert isinstance(
+                module, nn.Module
+            ), "module must be a nn.Module in GWT Hook mode"
 
             super().__init__(
                 name=name,
@@ -736,6 +736,8 @@ class OpenWeightsAdapterHook(nn.Module):
             feedforward_dim=target_linear.out_features,
             context_dim=context_dim,
             initial_branches=1,
+            device=target_linear.weight.device,
+            dtype=target_linear.weight.dtype,
         )
 
     def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
@@ -839,12 +841,18 @@ class NeurogenesisAstrocyteManager(nn.Module):
     """
 
     def __init__(
-        self, calcium_decay: float = 0.12, safety_ceiling: float = 4.0
+        self,
+        calcium_decay: float = 0.12,
+        safety_ceiling: float = 4.0,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         super().__init__()
         self.calcium_decay = calcium_decay
         self.safety_ceiling = safety_ceiling
-        self.calcium_store = nn.Parameter(torch.zeros(1), requires_grad=False)
+        self.calcium_store = nn.Parameter(
+            torch.zeros(1, device=device, dtype=dtype), requires_grad=False
+        )
 
     def monitor_and_regulate(self, x: torch.Tensor) -> torch.Tensor:
         """
