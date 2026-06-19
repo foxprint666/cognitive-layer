@@ -1,6 +1,7 @@
 import torch
 from cognitive_aug.models.autonomic_brain import StandaloneBrainModel
 
+
 def test_standalone_brain_model():
     model = StandaloneBrainModel(latent_dim=16, key_dim=4)
     visual_input = torch.randn(2, 3, 32, 32)
@@ -25,6 +26,7 @@ def test_standalone_brain_model():
             assert param.grad is not None
 
     print("StandaloneBrainModel test passed!")
+
 
 if __name__ == "__main__":
     test_standalone_brain_model()

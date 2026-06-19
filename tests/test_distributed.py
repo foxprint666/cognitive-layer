@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from cognitive_aug.engine import CognitiveAugEngine, GlobalWorkspace
 
+
 def test_device_alignment_on_mismatched_inputs():
     """Verify that inputs on arbitrary CUDA/CPU devices align with the internal GWT components."""
     if not torch.cuda.is_available():
@@ -22,10 +23,7 @@ def test_device_alignment_on_mismatched_inputs():
 
     # Register model adapter
     adapter = engine.register_module(
-        name="gpu_layer",
-        module=model,
-        latent_dim=4,
-        device=device_a
+        name="gpu_layer", module=model, latent_dim=4, device=device_a
     )
 
     # Execute step with inputs generated on GPU

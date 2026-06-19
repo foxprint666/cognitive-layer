@@ -60,9 +60,7 @@ class IITIntegrationMonitor(nn.Module):
 
                     # 4. Apply partition-size normalization to prevent trivial cuts (e.g. cutting 1 element)
                     norm_factor = min(len(group_a), len(group_b)) / num_components
-                    normalized_phi = (
-                        phi_p / norm_factor if norm_factor > 0 else phi_p
-                    )
+                    normalized_phi = phi_p / norm_factor if norm_factor > 0 else phi_p
 
                     if normalized_phi < min_normalized_phi:
                         min_normalized_phi = normalized_phi

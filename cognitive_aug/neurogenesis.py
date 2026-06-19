@@ -112,9 +112,9 @@ class ExtendedDendriticModuleAdapter(ModuleAdapter):
             # GWT Hook mode
             name = name_or_feedforward_dim
             module = module_or_context_dim
-            assert isinstance(module, nn.Module), (
-                "module must be a nn.Module in GWT Hook mode"
-            )
+            assert isinstance(
+                module, nn.Module
+            ), "module must be a nn.Module in GWT Hook mode"
 
             super().__init__(
                 name=name,
