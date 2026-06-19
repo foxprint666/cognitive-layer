@@ -22,7 +22,7 @@ from cognitive_aug.glia import GradientSanitizerHook
 
 class StandaloneBrainModel(nn.Module):
     def __init__(
-        self, 
+        self,
         latent_dim: int = 512, 
         key_dim: int = 64, 
         num_concepts: int = 5,
@@ -30,6 +30,7 @@ class StandaloneBrainModel(nn.Module):
         damping_factor: float = 0.2
     ) -> None:
         super().__init__()
+        self.name = "standalone_brain"
         self.latent_dim = latent_dim
         self.key_dim = key_dim
         
@@ -62,8 +63,10 @@ class StandaloneBrainModel(nn.Module):
         
         # 4. Neuromodulation & Glial Regulation Safeties (Phase v0.4 & v0.5)
         self.monitor = MetacognitiveMonitor(alpha_ne=0.8, alpha_ach=0.8)
+        # Passing self as the adapter for the sanitizer hook
         self.sanitizer = GradientSanitizerHook(
-            max_variance_threshold=max_variance_threshold, 
+            adapter=self,
+            max_variance_threshold=max_variance_threshold,
             damping_factor=damping_factor
         )
         
@@ -82,32 +85,59 @@ class StandaloneBrainModel(nn.Module):
 
     def _register_protective_glial_hooks(self) -> None:
         """Phase v0.5: Attaches virtual astrocyte protectors to core weights."""
-        for name, param in self.named_parameters():
-            if param.requires_grad and ("lobe" in name or "crossbar" in name):
-                param.register_hook(self.sanitizer)
+        # GradientSanitizerHook ALREADY registers hooks for all parameters in self.adapter (self)
+        # Manually registering it again as a callable leads to errors.
+        pass
+
+    def reset_context(self) -> None:
+        """Explicit, non-leaking reset function to detach context at sequence boundaries."""
+        with torch.no_grad():
+            self.internal_context = torch.zeros(
+                self.internal_context.shape[0],
+                self.latent_dim,
+                device=self.internal_context.device,
+                dtype=self.internal_context.dtype,
+            )
 
     def forward(self, visual_input: torch.Tensor, recurrent_steps: int = 3) -> torch.Tensor:
         batch_size = visual_input.shape[0]
         device = visual_input.device
-        
+        dtype = visual_input.dtype
+
         # Sync working memory allocation sizes to match the runtime batch dimension
         if self.internal_context.shape[0] != batch_size:
-            self.internal_context = torch.zeros(batch_size, self.latent_dim, device=device)
-            
+            with torch.no_grad():
+                self.internal_context = torch.zeros(
+                    batch_size, self.latent_dim, device=device, dtype=dtype
+                )
+
+        # Ensure internal_context is on the correct device/dtype (in case of model movement)
+        if (
+            self.internal_context.device != device
+            or self.internal_context.dtype != dtype
+        ):
+            with torch.no_grad():
+                self.internal_context = self.internal_context.to(
+                    device=device, dtype=dtype
+                )
+
         # Step A: Extract raw feedforward features from current sensory arrays
         vis_features = self.visual_lobe(visual_input)
-        
+
+        # Capture current recurrent state for the loop
+        current_context = self.internal_context
+
         # Step B: Begin the Conscious Deliberation Loop (Recurrent Processing Cycle)
         for t in range(recurrent_steps):
             # Run language/internal thought updates fueled by historical context
-            lang_features = self.language_lobe(self.internal_context)
-            
+            lang_features = self.language_lobe(current_context)
+
             # Use package-compliant crossbar writing mechanics
             # Map raw vectors into dedicated slots concurrently
             self.crossbar.write_slot(0, vis_features)
             self.crossbar.write_slot(1, lang_features)
             self.crossbar.write_slot(2, torch.zeros_like(vis_features)) # Motor target preparation lane
-            self.crossbar.write_slot(3, self.internal_context) # Loop back historic memory vector
+            self.crossbar.write_slot(3, current_context) # Loop back historic memory vector
             
             # Execute all-to-all crossbar message passing
             routed_slots = self.crossbar() # Layout outcome matrix: [B, 4, latent_dim]
@@ -125,20 +155,18 @@ class StandaloneBrainModel(nn.Module):
             # Central GWT Gated Access Selection & Competitive Broadcast
             # The workspace evaluates proposals against the dynamic goals of the network
             next_broadcast = self.workspace(latent_states, keys)
-            
-            # Phase v0.8: Graph Isolation Rule Enforcement
-            # We preserve gradient updates inside the step, but clone detached features 
-            # to insulate state cross-over boundaries from accumulating massive graph histories.
-            if self.training:
-                self.internal_context = next_broadcast
-            else:
-                self.internal_context = next_broadcast.detach().clone()
-                
+
+            # Update loop state
+            current_context = next_broadcast
+
             # Step C: Update Metacognitive Neuromodulation (Phase v0.4 Chemical Metrics)
             if hasattr(self.workspace, "last_weights"):
                 # Track attention entropy to calculate dynamic concentration levels
                 self.monitor.modulate_from_weights(self.workspace.last_weights)
 
+        # Finalize internal context update (Phase v0.8 Graph Isolation)
+        self.internal_context = current_context.detach().clone()
+
         # Step D: Emit motor instructions from finalized consolidated working state
-        action_logits = self.motor_lobe(self.internal_context)
+        action_logits = self.motor_lobe(current_context)
         return action_logits

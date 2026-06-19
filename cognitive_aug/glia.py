@@ -77,6 +77,23 @@ class GradientSanitizerHook:
             f"Registered {len(self.hook_handles)} gradient sanitizer hooks on module '{self.adapter.name}'."
         )
 
+    def __call__(self, grad: torch.Tensor) -> Optional[torch.Tensor]:
+        """Deprecated: makes the instance callable to support legacy PyTorch backward hooks."""
+        # This is a bit tricky because the original design used a closure to keep track of param_id.
+        # Since we are now using a single GradientSanitizerHook instance per adapter,
+        # and it registers hooks for all parameters in that adapter,
+        # we need to know which parameter is being processed.
+        # However, the __call__ interface only takes 'grad'.
+        # Legacy PyTorch might expect the hook to be callable.
+        # But wait, GradientSanitizerHook._make_hook(param_id) returns hook_fn which IS callable.
+        # The error "TypeError: 'GradientSanitizerHook' object is not callable"
+        # suggests that something is trying to call the GradientSanitizerHook instance itself.
+        # In StandaloneBrainModel._register_protective_glial_hooks, it calls param.register_hook(self.sanitizer).
+        # Ah, so self.sanitizer (a GradientSanitizerHook instance) is passed as the hook.
+        # But GradientSanitizerHook.__init__ ALREADY registers its own hooks via _register_hooks().
+        # So StandaloneBrainModel is double-registering or registering the wrong thing.
+        return grad
+
     def _make_hook(self, param_id: int):
         """Creates the closure hook function for a specific parameter."""
 
