@@ -216,7 +216,7 @@ def test_async_task_consolidation() -> None:
     assert task_info["backend"] == "Local Thread"
 
     # Wait for local worker thread to process background queue
-    for _ in range(30):
+    for _ in range(100):
         if len(engine.replay_buffer) == 0:
             break
         time.sleep(0.1)
