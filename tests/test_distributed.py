@@ -22,7 +22,7 @@ def test_device_alignment_on_mismatched_inputs():
     model = nn.Linear(4, 4).to(device_a)
 
     # Register model adapter
-    adapter = engine.register_module(
+    engine.register_module(
         name="gpu_layer", module=model, latent_dim=4, device=device_a
     )
 
